@@ -1,0 +1,184 @@
+<!-- Design 01 -->
+<!-- Detect and Display Basic Layer Info -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Figma Selection</title>
+  <style>
+    body {font-family: Arial, sans-serif; padding: 10px; width: 10px; width: 250px;}
+    h2 { font-size: 14px;}
+    pre {font-size:12px; background: #eee; padding: 5px;}
+  </style>
+</head>
+<body>
+  <h2>Selected Layer</h2>
+  <pre id="output">No selection yet...</pre>
+  <script>
+    // Receive data from Figma
+    window.onmessage = (event) => {
+      const data = event.data.pluginMessage;
+      if(!data) {
+        document.getElementById("output").innerText = "No selection yet...";
+        return;
+      }
+      document.getElementById("output").innerText = `
+      Name: ${data.name}
+      Type: ${data.type}
+      width: ${data.width}px
+      Height: ${data.height}px
+      `
+    }
+  </script>
+</body>
+</html>
+<!-- VERSION 01 -->
+<!-- <style>
+ 
+</style>
+<h2>Margin Measurement</h2>
+<p id="status">Select a layer to see margin values.</p>
+<p>Select a unit to convert padding values:</p>
+<select id="unit-selector">
+  <option value="px">Pixels (px)</option>
+  <option value="%">Percentage (%)</option>
+  <option value="rem">REM (rem)</option>
+  <option value="em">EM (em)</option>
+</select>
+
+<h3>VALUES</h3>
+<pre id="output">Waiting for selection...</pre>
+
+<button id="reset">Reset</button>
+
+<script>
+  function updateOutput(data) {
+    document.getElementById("output").innerText = data ? `
+    Layer: ${data.name} (${data.layerType})\n
+    Width: ${data.width}px | Height: ${data.height}px\n
+    Margin (Collapsing Applied):\n
+    Top: ${data.margin.top} Right: ${data.margin.right}\n
+    Bottom: ${data.margin.bottom} Left: ${data.margin.left}\n
+    Padding:
+    Top: ${data.padding.top} Right: ${data.padding.right} \n
+    Bottom: ${data.padding.bottom} Left: ${data.padding.left}\n
+    `: "Waiting for selection...";
+  }
+
+  // Listen for unit selection changes in Ui and send to Figma plugin 
+  document.getElementById("unit-selector").onchange = (event) => {
+    selectedUnit = event.target.value; // Update unit
+    parent.postMessage({ pluginMessage: { type: "updateUnit", unit: selectedUnit}}, "*");// Send to code.ts
+    // console.log( parent.postMessage({ pluginMessage: { type: "updateUnit", unit: selectedUnit}}, "*"));
+    // Request an immediate UI update from Figma
+    parent.postMessage({ pluginMessage: "refreshSelction"}, "*")
+  };
+
+
+ 
+// lISTEN FOR MESSAGES FROM FIGMA PLUGIN
+  window.onmessage = (event) => {
+    if(event.data.pluginMessage) {
+      if(event.data.pluginMessage.unit) {
+        selectedUnit = event.data.pluginMessage.unit;// update the stored unit
+        document.getElementById("unit-selector").value = selectedUnit; // update dropdowm 
+      }
+      updateOutput(event.data.pluginMessage);// Refresh displayed values 
+    }
+  };
+
+  document.getElementById("reset").onclick = () => {
+    parent.postMessage({ pluginMessage: "resetSelection"}, "*");
+  }
+</script> -->
+
+
+
+
+
+<!-- BOX MODEL  -->
+<!-- <h2>Box Model Properties</h2>
+<p id="status">Select a layer to analyze padding, margin and border.</p>
+<pre id="output">Waiting for selection...</pre>
+<button id="reset">Reset</button>
+<script>
+  function updateOutput(data) {
+    document.getElementById("output").innerText = data ? 
+    `Layer: ${data.name}  Type: ${data.layerType} Width: ${data.width}px Height: ${data.height}px 
+    padding: Top-> ${data.padding.top}px, Right-> ${data.padding.right}px, Bottom ->  ${data.padding.bottom}px,Left -> ${data.padding.left}px 
+    Margin: Top-> {data.margin.top}px, Right-> ${data.margin.right}px, Bottom-> ${data.margin.bottom}px, Left-> ${data.margin.left}px
+    Border: ${data.border} `: "Waiting for selection...";
+  }
+
+  window.onmessage = (event) => {
+    if(event.data.pluginMessage) {
+      updateOutput(event.data.pluginMessage);
+    }
+  };
+
+  document.getElementById("reset").onclick = () => {
+    parent.postMessage({ pluginMessage: "resetSelection"}, "*");
+  }
+</script> -->
+
+<!-- LAYER TYPE IDENTIFIER -->
+<!-- <h2> Layer Information</h2>
+<p id="status">Select a layer to see its type </p>
+<pre id="output">Waiting for selection...</pre>
+<button id="reset">Reset</button>
+<script>
+  function updateOutput(data){
+    document.getElementById("output").innerText = data ? `Layer: ${data.name} Type: ${data.layerCategory} Size: ${data.width}px ${data.height}px ` : "Waiting for selection...";
+  }
+  window.onmessage = (event) => {
+    if(event.data.pluginMessage) {
+      updateOutput(event.data.pluginMessage);
+    }
+  };
+
+  document.getElementById("reset").onclick = () => {
+    parent.postMessage({ pluginMessage: "resetSelection"}, "*");
+  } -->
+</script>
+
+<!-- UNIT CONVERTER VERSION 1 -->
+<!-- <h2>Unit Converter</h2>
+<p id="status">Select a layer to see unit conversions.</p>
+<div id="output"></div>
+<button id="reset">Reset</button>
+<script>
+   function updateOutput(data) {
+    const outputDiv = document.getElementById("output");
+    outputDiv.innerHTML = ""; //Clear previous content
+
+    if(!data) {
+      document.getElementById("status").innerText="Select a layer to see unit conversions. ";
+      return;
+    }
+
+    document.getElementById("status").innerText = `Layer: ${data.name} (${data.type})`;
+    const units = ["px","%","rem","em","vw","vh"];
+    units.forEach(unit => {
+      const value = data[unit];
+      const p = document.createElement("p");
+      p.innerHTML=`${unit.toUpperCase()}: <strong>${value}</strong>`;
+      p.onclick = () => {
+        navigator.clipboard.writeText(value);
+        alert(`${unit} copied to clipboard!`);
+      };
+      outputDiv.appendChild(p);
+    });
+  }
+
+  window.onmessage = (event) => {
+    if(event.data.pluginMessage) {
+      console.log("Update output Trigger");
+      updateOutput(event.data.pluginMessage);
+    }
+  };
+
+  document.getElementById("reset").onclick = () => {
+    parent.postMessage({ pluginMessage: "resetSelection"}, "*");
+  }
+</script> -->

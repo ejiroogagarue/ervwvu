@@ -1,0 +1,86 @@
+<!-- VERSION 04 -->
+ <h2>Selected Layers</h2>
+ <ul id="layer-list"></ul>
+ <button id="reset">Reset Selection</button>
+ <script>
+  function updateLayerList(layers) {
+    const listElement = document.getElementById("layer-list");
+    listElement.innerHTML = ""; // Clear previous list
+
+    if(layers.length === 0) {
+      listElement.innerHTML = "<p>No layers selected.</p>";
+    } else {
+      layers.forEach(layer => {
+        const li = document.createElement("li");
+        li.innerText = layer;
+        listElement.appendChild(li);
+      });
+    }
+  }
+
+  window.onmessage = (event) => {
+      if(event.data.pluginMessage) {
+        updateLayerList(event.data.pluginMessage.layers);
+      }
+  };
+
+  document.getElementById("reset").onclick = () => {
+    parent.postMessage({ pluginMessage: "resetSelection"}, "*");
+  }
+ </script>
+<!-- VERSION 03 -->
+<!-- <h2>Selected Layers</h2>
+<pre id="layer-info">Waiting for selection...</pre>
+<button id="reset">Reset Selection</button>
+<script>
+  window.onmessage = (event) => {
+    if(event.data.pluginMessage) {
+      document.getElementById("layer-info").innerText= event.data.pluginMessage.message;
+    }
+  };
+
+  document.getElementById("reset").onclick = () => {
+    parent.postMessage({pluginMessage: "resetSelection"}, "*");
+  }
+</script> -->
+
+<!-- VERSION 02  -->
+
+<!-- <h2>Select Two Layers</h2>
+<p id="status">Waiting for selection...</p>
+<button id="reset">Reset Selection</button>
+<script>
+  function updateStatus(message) {
+    document.getElementById("status").innerText = message;
+  }
+  window.onmessage = (event) => {
+    if(event.data.pluginMessage) {
+      updateStatus(event.data.pluginMessage.message);
+    } 
+  };
+
+  document.getElementById("reset").onclick = () => {
+    parent.postMessage({ pluginMessage: "resetSelection"}, "*");
+  }
+</script> -->
+
+
+
+
+<!-- VERSION 01 -->
+<!-- 
+<h2>Click on a layer to Select</h2>
+<p id="status">No layer selected</p>
+<script>
+  // Function to update the UI status message
+  function updateStatus(message) {
+    document.getElementById("status").innerText = message;
+  }
+  // Listen for updates from figma
+  window.onmessage = (event) => {
+    if(event.data.pluginMessage) {
+      updateStatus(event.data.pluginMessage);
+    }
+  }
+
+</script> -->
