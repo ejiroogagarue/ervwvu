@@ -1,11 +1,12 @@
 {
   "compilerOptions": {
+    "baseUrl": "./",
+    "types": ["@figma/plugin-typings"],
+     "skipLibCheck": true,
+    "moduleResolution": "node",
     "target": "es6",
-    "lib": ["es6"],
+    "lib": ["ES6"],
     "strict": true,
-    "typeRoots": [
-      "./node_modules/@types",
-      "./node_modules/@figma"
-    ]
+    "typeRoots": ["./types", "./node_modules/@types", "./node_modules/@figma"]
   }
 }

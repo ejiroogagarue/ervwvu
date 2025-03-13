@@ -1,184 +1,437 @@
-<!-- Design 01 -->
-<!-- Detect and Display Basic Layer Info -->
+<!--  Unit Identifier Ver. 01 -->
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Figma Selection</title>
-  <style>
-    body {font-family: Arial, sans-serif; padding: 10px; width: 10px; width: 250px;}
-    h2 { font-size: 14px;}
-    pre {font-size:12px; background: #eee; padding: 5px;}
-  </style>
-</head>
-<body>
-  <h2>Selected Layer</h2>
-  <pre id="output">No selection yet...</pre>
-  <script>
-    // Receive data from Figma
-    window.onmessage = (event) => {
-      const data = event.data.pluginMessage;
-      if(!data) {
-        document.getElementById("output").innerText = "No selection yet...";
-        return;
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Figma Selection</title>
+
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Fira+Code:wght@300..700&display=swap");
+      @import url("https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap");
+      body,
+      div,
+      dl,
+      dt,
+      dd,
+      ul,
+      ol,
+      li,
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6,
+      pre,
+      form,
+      fieldset,
+      input,
+      textarea,
+      p,
+      blockquote,
+      th,
+      td {
+        margin: 0;
+        padding: 0;
       }
-      document.getElementById("output").innerText = `
-      Name: ${data.name}
-      Type: ${data.type}
-      width: ${data.width}px
-      Height: ${data.height}px
-      `
-    }
-  </script>
-</body>
-</html>
-<!-- VERSION 01 -->
-<!-- <style>
- 
-</style>
-<h2>Margin Measurement</h2>
-<p id="status">Select a layer to see margin values.</p>
-<p>Select a unit to convert padding values:</p>
-<select id="unit-selector">
-  <option value="px">Pixels (px)</option>
-  <option value="%">Percentage (%)</option>
-  <option value="rem">REM (rem)</option>
-  <option value="em">EM (em)</option>
-</select>
-
-<h3>VALUES</h3>
-<pre id="output">Waiting for selection...</pre>
-
-<button id="reset">Reset</button>
-
-<script>
-  function updateOutput(data) {
-    document.getElementById("output").innerText = data ? `
-    Layer: ${data.name} (${data.layerType})\n
-    Width: ${data.width}px | Height: ${data.height}px\n
-    Margin (Collapsing Applied):\n
-    Top: ${data.margin.top} Right: ${data.margin.right}\n
-    Bottom: ${data.margin.bottom} Left: ${data.margin.left}\n
-    Padding:
-    Top: ${data.padding.top} Right: ${data.padding.right} \n
-    Bottom: ${data.padding.bottom} Left: ${data.padding.left}\n
-    `: "Waiting for selection...";
-  }
-
-  // Listen for unit selection changes in Ui and send to Figma plugin 
-  document.getElementById("unit-selector").onchange = (event) => {
-    selectedUnit = event.target.value; // Update unit
-    parent.postMessage({ pluginMessage: { type: "updateUnit", unit: selectedUnit}}, "*");// Send to code.ts
-    // console.log( parent.postMessage({ pluginMessage: { type: "updateUnit", unit: selectedUnit}}, "*"));
-    // Request an immediate UI update from Figma
-    parent.postMessage({ pluginMessage: "refreshSelction"}, "*")
-  };
-
-
- 
-// lISTEN FOR MESSAGES FROM FIGMA PLUGIN
-  window.onmessage = (event) => {
-    if(event.data.pluginMessage) {
-      if(event.data.pluginMessage.unit) {
-        selectedUnit = event.data.pluginMessage.unit;// update the stored unit
-        document.getElementById("unit-selector").value = selectedUnit; // update dropdowm 
+      body {
+        font-family: Arial, sans-serif;
+        padding: 10px;
+        width: 10px;
+        width: 250px;
       }
-      updateOutput(event.data.pluginMessage);// Refresh displayed values 
-    }
-  };
+      h2 {
+        font-size: 14px;
+        margin-bottom: 5px;
+      }
+      pre {
+        font-size: 12px;
+        background: #f5f5f5;
+        padding: 8px;
+        border-radius: var(--radius);
+        width: 24rem;
+        height: 12rem;
+      }
+      select,
+      button {
+        margin-top: 5px;
+        padding: 6px;
+        width: 100%;
+        font-size: 12px;
+      }
+      section {
+        margin-bottom: 0.75rem;
+      }
+      :root {
+        --radius: 8px;
+        --border: 4px;
+        --height: 30px;
+        --speed: 0.25s;
+      }
+      .tabs {
+        height: var(--height);
+        width: 24rem;
+        display: grid;
+        grid-auto-flow: column;
+        background: hsl(0 0% 0%);
+        border-radius: var(--radius);
+        position: relative;
+        border: var(--border) solid hsl(0 0% 0%);
+      }
+      .tabs {
+        --ease: linear(
+          0,
+          0.1641 3.52%,
+          0.311 7.18%,
+          0.4413 10.99%,
+          0.5553 14.96%,
+          0.6539 19.12%,
+          0.738 23.5%,
+          0.8086 28.15%,
+          0.8662 33.12%,
+          0.9078 37.92%,
+          0.9405 43.12%,
+          0.965 48.84%,
+          0.9821 55.28%,
+          0.992 61.97%,
+          0.9976 70.09%,
+          1
+        );
+      }
 
-  document.getElementById("reset").onclick = () => {
-    parent.postMessage({ pluginMessage: "resetSelection"}, "*");
-  }
-</script> -->
+      .tabs > input,
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border-width: 0;
+      }
 
+      .tabs:has(:checked:nth-of-type(1)) {
+        --active: --choice-1;
+      }
+      .tabs:has(:checked:nth-of-type(2)) {
+        --active: --choice-2;
+      }
+      .tabs:has(:checked:nth-of-type(3)) {
+        --active: --choice-3;
+      }
+      .tabs:has(:checked:nth-of-type(4)) {
+        --active: --choice-4;
+      }
 
+      .tabs :checked + label {
+        --highlight: 1;
+      }
+      .tabs label {
+        padding: o clamp(0.5rem, 2vw + 0.25rem, 2rem);
+        cursor: pointer;
+        text-align: center;
+        height: 100%;
+        display: grid;
+        border-radius: calc(var(--radius) - var(--border));
+        place-items: center;
+        color: hsl(0 0% 100% / calc(0.5 + var(--highlight, 0)));
+        transition: background, color;
+        transition-duration: 0.25s;
+        transition-timing-function: var(--ease, ease);
+      }
 
+      input:not(:checked) + label:hover {
+        --highlight: 0.35;
+        background: hsl(0 0% 20%);
+      }
 
+      .tabs::after {
+        pointer-events: none;
+        content: "";
+        background: hsl(0 0% 100%);
+        position: absolute;
+        border-radius: calc(var(--radius) - var(--border));
+        mix-blend-mode: difference;
+        transition: inset, outline-color;
+        transition-duration: var(--speed);
+        transition-timing-function: var(--ease, ease);
+        outline: 2px solid transparent;
+        anchor-default: var(--active, --choice-1);
+        inset: 0 anchor(var(--active) right) 0 anchor(var(--active) left);
+      }
+      .tabs:has(:focus-visible)::after {
+        outline-color: red;
+      }
 
-<!-- BOX MODEL  -->
-<!-- <h2>Box Model Properties</h2>
-<p id="status">Select a layer to analyze padding, margin and border.</p>
-<pre id="output">Waiting for selection...</pre>
-<button id="reset">Reset</button>
-<script>
-  function updateOutput(data) {
-    document.getElementById("output").innerText = data ? 
-    `Layer: ${data.name}  Type: ${data.layerType} Width: ${data.width}px Height: ${data.height}px 
-    padding: Top-> ${data.padding.top}px, Right-> ${data.padding.right}px, Bottom ->  ${data.padding.bottom}px,Left -> ${data.padding.left}px 
-    Margin: Top-> {data.margin.top}px, Right-> ${data.margin.right}px, Bottom-> ${data.margin.bottom}px, Left-> ${data.margin.left}px
-    Border: ${data.border} `: "Waiting for selection...";
-  }
+      .tabs label:nth-of-type(1) {
+        anchor-name: --choice-1;
+      }
+      .tabs label:nth-of-type(2) {
+        anchor-name: --choice-2;
+      }
+      .tabs label:nth-of-type(3) {
+        anchor-name: --choice-3;
+      }
+      .tabs label:nth-of-type(4) {
+        anchor-name: --choice-4;
+      }
+      .wrapper {
+        margin-left: 2.5rem;
+        margin-right: 2.5rem;
+        margin-top: 0.1rem;
+        width: 100%;
+        /* display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center; */
+      }
+      .title {
+        font-family: "Inter", sans-serif;
+        font-optical-sizing: auto;
+        font-weight: 600;
+        font-size: 1.5rem;
+        font-style: normal;
+        margin-bottom: 0.5rem;
+      }
+      .subTitle {
+        font-family: "Inter", sans-serif;
 
-  window.onmessage = (event) => {
-    if(event.data.pluginMessage) {
-      updateOutput(event.data.pluginMessage);
-    }
-  };
+        font-size: 1.1rem;
+        font-weight: 500;
+        font-style: normal;
+        margin-bottom: 0.5rem;
+        /* margin-bottom: 1rem; */
+      }
+      .outputContainer {
+        position: relative;
+        background: #f5f5f5;
+        border-radius: var(--radius);
+        width: 24rem;
+        height: 15rem;
+        font-family: "Fira Code", monospace;
+        font-weight: 400;
+        font-size: 1.2rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: flex-start;
+        padding: 8px;
+        /* padding-bottom: 8px; */
+        text-align: left;
+        white-space: pre-line; /* ✅ Preserves line breaks in innerText */
+      }
+      .resetButton {
+        width: 25rem;
+        font-family: "Inter", sans-serif;
+        font-optical-sizing: auto;
+        font-weight: 600;
+        font-size: 1.2rem;
+        border-radius: 16px;
+        background-color: FFCC32;
+      }
+      .copyButton {
+        display: flex;
+        align-items: center; /* ✅ Vertically align icon & text */
+        justify-content: center; /* ✅ Ensures they are centered */
+        gap: 6px; /* Adds space between icon and text */
+        /* padding: 6px 12px; */
+        font-size: 16px;
+        background: #f5f5f5;
+        /* background-color: #ffcc32; */
+        color: black;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background 0.3s;
+        width: auto;
+        position: absolute;
+        top: 8px; /* Adjust position from top */
+        right: 8px; /* Adjust position from right */
+        height: 32px;
+      }
+      .copyButton:hover {
+        background-color: #ffcc32;
+        color: black;
+      }
 
-  document.getElementById("reset").onclick = () => {
-    parent.postMessage({ pluginMessage: "resetSelection"}, "*");
-  }
-</script> -->
+      .copyButton:hover .copyIcon {
+        fill: black; /* ✅ Change icon color when hovered */
+      }
 
-<!-- LAYER TYPE IDENTIFIER -->
-<!-- <h2> Layer Information</h2>
-<p id="status">Select a layer to see its type </p>
-<pre id="output">Waiting for selection...</pre>
-<button id="reset">Reset</button>
-<script>
-  function updateOutput(data){
-    document.getElementById("output").innerText = data ? `Layer: ${data.name} Type: ${data.layerCategory} Size: ${data.width}px ${data.height}px ` : "Waiting for selection...";
-  }
-  window.onmessage = (event) => {
-    if(event.data.pluginMessage) {
-      updateOutput(event.data.pluginMessage);
-    }
-  };
+      .copyIcon {
+        width: 16px;
+        height: 16px;
+        fill: black;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrapper">
+      <!-- 2.) Unit Selector  -->
+      <!-- When event is triggered it changes the unit of our measurement  -->
+      <section class="">
+        <h3 class="title">Unit Selection</h3>
+        <div class="tabs" id="unit-selector">
+          <input type="radio" id="pixels" name="unit" value="px" checked />
+          <label for="pixels">PX</label>
+          <input type="radio" id="percentage" name="unit" value="%" />
+          <label for="percentage">%</label>
+          <input type="radio" id="rem" name="unit" value="rem" />
+          <label for="rem">REM</label>
+          <input type="radio" id="em" name="unit" value="em" />
+          <label for="em">EM</label>
+        </div>
+      </section>
 
-  document.getElementById("reset").onclick = () => {
-    parent.postMessage({ pluginMessage: "resetSelection"}, "*");
-  } -->
-</script>
+      <section>
+        <h3 class="title">Measurements</h3>
 
-<!-- UNIT CONVERTER VERSION 1 -->
-<!-- <h2>Unit Converter</h2>
-<p id="status">Select a layer to see unit conversions.</p>
-<div id="output"></div>
-<button id="reset">Reset</button>
-<script>
-   function updateOutput(data) {
-    const outputDiv = document.getElementById("output");
-    outputDiv.innerHTML = ""; //Clear previous content
+        <!-- 1.) OUR PLUGIN BEGINS HERE  -->
+        <!-- This shows information when selected -->
 
-    if(!data) {
-      document.getElementById("status").innerText="Select a layer to see unit conversions. ";
-      return;
-    }
+        <h3 class="subTitle">
+          Layer-> <span id="layer-info">No Layer selected</span>
+        </h3>
+        <div class="outputContainer">
+          <div id="output">
+            <span class="default">Select an object to view measurements.</span>
+          </div>
+          <button id="copy-button" class="copyButton">
+            <svg
+              class="copyIcon"
+              xmlns="http://www.w3.org/2000/svg"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+            >
+              <path
+              fill="black"
+                d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zM19 5H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"
+              />
+            </svg>
+           <span class="copyText">Copy</span>
+          </button>
+        </div>
+      </section>
 
-    document.getElementById("status").innerText = `Layer: ${data.name} (${data.type})`;
-    const units = ["px","%","rem","em","vw","vh"];
-    units.forEach(unit => {
-      const value = data[unit];
-      const p = document.createElement("p");
-      p.innerHTML=`${unit.toUpperCase()}: <strong>${value}</strong>`;
-      p.onclick = () => {
-        navigator.clipboard.writeText(value);
-        alert(`${unit} copied to clipboard!`);
+      <!-- 3.) RESET BUTTON  -->
+      <button id="reset-button" class="resetButton">Reset Selection</button>
+    </div>
+
+    <script>
+      function updateOutput(data) {
+        //30.) safety if no data pass ui doesn't change
+        if (!data) {
+          console.log("No data received, resetting UI...");
+          document.getElementById("output").innerText =
+            "Waiting for selection...";
+          document.getElementById("layer-info").innerText = `No Layer selected`;
+          return;
+        }
+
+        if (data.type === "resetSelection") {
+          document.getElementById(
+            "layer-info"
+          ).innerHTML = ` No Layer selected `;
+          document.getElementById("output").innerText = ``;
+          document.getElementById("pixels").checked = true;
+          return;
+        }
+
+        document.getElementById("layer-info").innerHTML = ` ${data.type} `;
+        document.getElementById("output").innerText = `
+           width: ${data.width || ""} 
+           height: ${data.height || ""}
+           margin:  ${data.margin?.top || ""} ${data.margin?.right || ""} ${
+          data.margin?.bottom || ""
+        } ${data.margin?.left || ""}
+           padding: ${data.padding?.top || ""} ${data.padding?.right || ""} ${
+          data.padding?.bottom || ""
+        } ${data.padding?.left || ""}
+           Border: ${data.border?.weight || ""} ${data.border?.style || ""}
+      `;
+      }
+
+      //27.) Listen for messages from code.ts
+      window.onmessage = (event) => {
+        // 28.) This is the data sent from figma.ui.postMessage(...) in code.ts.
+
+        if (event.data.pluginMessage) {
+          const message = event.data.pluginMessage;
+          if (message === "resetSelection" || message === null) {
+            console.log("Resetting UI...");
+            updateOutput(null);
+            return;
+          }
+          //29.)  if its true trigger updateOutput function
+          updateOutput(message);
+        }
       };
-      outputDiv.appendChild(p);
-    });
-  }
 
-  window.onmessage = (event) => {
-    if(event.data.pluginMessage) {
-      console.log("Update output Trigger");
-      updateOutput(event.data.pluginMessage);
-    }
-  };
+      //32.) If tab menu is selected send meesage --> "UpdateUnit" passing the unit -> "rem", "px","em","%"
+      document
+        .getElementById("unit-selector")
+        .addEventListener("change", (e) => {
+          parent.postMessage(
+            { pluginMessage: { type: "updateUnit", unit: e.target.value } },
+            "*"
+          );
+        });
 
-  document.getElementById("reset").onclick = () => {
-    parent.postMessage({ pluginMessage: "resetSelection"}, "*");
-  }
-</script> -->
+   
+
+      // 36.) Reset Selection Button
+      document.getElementById("reset-button").addEventListener("click", () => {
+        console.log("Sending resetSelection"); //Debuggin line
+        parent.postMessage({ pluginMessage: "resetSelection" }, "*");
+      });
+
+      document.getElementById("copy-button").addEventListener("click", function(){
+        let outputText = document.getElementById("output").innerText;
+        let tempTextArea = document.createElement("textarea");
+        tempTextArea.value = outputText;
+        document.body.appendChild(tempTextArea);
+
+        tempTextArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(tempTextArea);
+
+        // change button text for feedback 
+        let copyButton = document.getElementById("copy-button");
+        copyButton.innerHTML = `  <svg
+              class="copyIcon"
+              xmlns="http://www.w3.org/2000/svg"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+            >
+              <path
+              fill="black"
+                d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zM19 5H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"
+              />
+            </svg>
+           <span class="copyText">Copied!</span>`;
+
+        //Reset text after 2 seconds
+        setTimeout(() => {
+          copyButton.innerHTML= `   <svg
+              class="copyIcon"
+              xmlns="http://www.w3.org/2000/svg"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+            >
+              <path
+              fill="black"
+                d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zM19 5H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"
+              />
+            </svg>
+           <span class="copyText">Copy</span>`
+        }, 2000)
+      })
+    </script>
+  </body>
+</html>

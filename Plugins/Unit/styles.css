@@ -1,0 +1,99 @@
+:root {
+  --radius: 8px;
+   --border: 4px;
+  --height: 30px;
+--speed: 0.25s;
+    }
+body {font-family: Arial, sans-serif; padding: 10px; width: 10px; width: 250px;}
+h2 { font-size: 14px; margin-bottom: 5px;}
+pre {font-size:12px; background: #f5f5f5; padding: 8px; border-radius:4px;}
+select, button { margin-top: 5px; padding: 6px; width: 100%; font-size: 12px;}
+
+.tabs {
+ height: var(--height);
+ width: 24rem;
+ display: grid;
+ grid-auto-flow: column;
+ background: hsl(0 0% 0%);
+ border-radius: var(--radius);
+ position: relative;
+ border:var(--border) solid hsl(0 0% 0%);
+}
+.tabs {
+ --ease: linear(
+    0, 0.1641 3.52%, 0.311 7.18%,
+0.4413 10.99%, 0.5553 14.96%,
+0.6539 19.12%, 0.738 23.5%,
+0.8086 28.15%, 0.8662 33.12%,
+0.9078 37.92%, 0.9405 43.12%,
+0.965 48.84%, 0.9821 55.28%,
+0.992 61.97%, 0.9976 70.09%, 1
+ )
+}
+
+.tabs > input,
+.sr-only {
+ position: absolute;
+ width: 1px;
+ height: 1px;
+ padding: 0;
+ margin: -1px;
+ overflow: hidden;
+ clip: rect(0,0,0,0);
+ white-space: nowrap;
+ border-width: 0;
+}
+
+.tabs:has(:checked:nth-of-type(1)){ --active: --choice-1;}
+  .tabs:has(:checked:nth-of-type(2)){ --active: --choice-2;}
+     .tabs:has(:checked:nth-of-type(3)){ --active: --choice-3;}
+        .tabs:has(:checked:nth-of-type(4)){ --active: --choice-4;}
+
+       .tabs :checked + label { --highlight: 1; }
+       .tabs label {
+         padding: o clamp(0.5rem, 2vw + 0.25rem, 2rem);
+         cursor: pointer;
+         text-align: center;
+         height: 100%;
+         display:grid;
+         border-radius: calc(var(--radius) - var(--border));
+         place-items: center;
+         color: hsl(0 0% 100% / calc(0.5 + var(--highlight, 0)));
+         transition: background, color;
+         transition-duration: 0.25s;
+         transition-timing-function: var(--ease,ease);
+       }
+
+       input:not(:checked) + label:hover {
+        --highlight: 0.35;
+        background:hsl(0 0% 20%) ;
+       }
+
+       .tabs::after {
+         pointer-events: none;
+         content: "";
+         background: hsl(0 0% 100%);
+         position: absolute;
+         border-radius: calc(var(--radius) - var(--border));
+         mix-blend-mode: difference;
+         transition:inset, outline-color;
+         transition-duration: var(--speed);
+         transition-timing-function: var(--ease,ease);
+         outline: 2px solid transparent;
+         anchor-default: var(--active, --choice-1);
+         inset: 0 anchor(var(--active) right) 0 anchor(var(--active) left)
+       }
+       .tabs:has(:focus-visible)::after {
+          outline-color: red;
+        }
+
+        .tabs label:nth-of-type(1) { anchor-name: --choice-1; }
+        .tabs label:nth-of-type(2) { anchor-name: --choice-2; }
+        .tabs label:nth-of-type(3) { anchor-name: --choice-3; }
+        .tabs label:nth-of-type(4) { anchor-name: --choice-4; }
+        .wrapper{
+         margin-left: 2.5rem;
+         margin-right: 2.5rem;
+         margin-top: 2.5rem;
+         width: 100%;
+        }
