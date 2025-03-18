@@ -1,0 +1,13 @@
+<script>
+  document.addEventListener("click",(event) => {
+    const target = event.target;
+    if(target && target.dataset.breakpoint) {
+      const breakpoint = target.dataset.breakpoint;
+      const width = target.dataset.width;
+      parent.postMessage(
+        {pluginMessage: { type: "breakpointSelected", breakpoint, width }},
+        "*"
+      );
+    }
+  });
+</script>
