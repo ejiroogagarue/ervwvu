@@ -9,26 +9,40 @@
    In your tsconfig.json, ensure skipLibCheck or remove lib.dom to avoid conflicts.
 */
 
-let floatingUI: FrameNode | null = null;
-let pinnedFrameId: string | null = null;
-//Stores newly-created frames for each Breakpoint
-const breakpointsMap = new Map<string, FrameNode>();
+let floatingUI: FrameNode | null = null; // decalre global variable floatingUI
+let pinnedFrameId: string | null = null; // declared Global variable piined frame
+const breakpointsMap = new Map<string, FrameNode>(); //Stores newly-created frames for each Breakpoint
+
 // Keep track of the frame's last known position for movement checks
 let lastFrameX: number | null = null;
 let lastFrameY: number | null = null;
 
 ////////////////////////////////////////////////////////
-// PLUGIN ENTRY
+// 1.) PLUGIN ENTRY
 ////////////////////////////////////////////////////////
-
+/**
+ *  we declare an "async" function
+ * -> this sort of function allows things to run in the background without blocking other code
+ * -> So any tasks that takes time to complete can "wait"
+ */
 async function main() {
-  // Required if you want to use 'documentchange" in incremental mode
+  // 2.) Required if you want to use 'documentchange" in incremental mode
+  /** Figma doesn't automatically load all pages when a plugin starts so to be memort efficinet
+   * we use this function , it allows our plugin to tracj changes across all pages without
+   * loading everything at once.
+   *
+   */
   await figma.loadAllPagesAsync();
 
-  // Register "selectionchange"
-  figma.on("selectionchange", onSelectionChange);
+  // 3. Register "selectionchange"
+  // figma.on("selectionchange", onSelectionChange);
+  // Debug Test 3.1
+  figma.on("selectionchange", async () => {
+    console.log("[Debug] Selection changed");
+    await onSelectionChange();
+  });
 
-  // Register "documentchange" for pinned UI movement
+  // 4. Register "documentchange" for pinned UI movement
   figma.on("documentchange", onDocumentChange);
 }
 
@@ -37,28 +51,37 @@ main().catch((err) => {
 });
 
 ////////////////////////////////////////////////////////
-// SELECTION CHANGE HANDLER
+// 5.) SELECTION CHANGE HANDLER
 ////////////////////////////////////////////////////////
 
 async function onSelectionChange() {
+  // 6.) record selection in figma
   const selection = figma.currentPage.selection;
 
-  // 1) If no pinned UI, and user selected exactly 1 Frame => create pinned UI
+  // 7) If no pinned UI, and user selected exactly 1 Frame => create pinned UI
   if (!floatingUI && selection.length === 1 && selection[0].type === "FRAME") {
     console.log("[Selection] Creating Floating UI for:", selection[0].name);
+    // 8.) Create Floating ui function is called
+    //Load font before UI creation
+    await figma.loadFontAsync({ family: "Inter", style: "Regular" });
     await createFloatingUI(selection[0] as FrameNode);
     return;
   }
 
-  // 2) If we do have a pinned UI, see if user clicked a tab or "Close" button
+  // 19) If we do have a pinned UI, see if user clicked a tab or "Close" button
   if (floatingUI) {
+    /**
+     * 20) This code tracks the Floating UI and its children so we can tell
+     * if a user is interacting with the plugin UI or the Figma canvas. */
+
     const floatingUIAndChildren: string[] = [floatingUI.id];
+
     floatingUI
       .findAll()
       .forEach((child) => floatingUIAndChildren.push(child.id));
 
     for (const node of selection) {
-      // Is the node or its parent a tab?
+      //20.)  Is the node or its parent a tab?
       const isNodeTab = node.getPluginData("isTab") === "true";
       const isNodeClose = node.getPluginData("isCloseButton") === "true";
 
@@ -80,7 +103,13 @@ async function onSelectionChange() {
         widthStr
       );
 
-      //If node isn't a tab or close button, check parent
+      //21.) If node isn't a tab or close button, check parent
+      /**
+       * This code checks if the selected element is inside a Frame and inherits data from its parent.
+        If the parent is a Breakpoint Tab, it retrieves its label and width.
+         If the parent is the Close Button, it marks it as such.
+       👉 This ensures that clicking on a tab's child element (like text) still counts as selecting the tab itself.
+       */
       if (!isTab && !isClose && node.parent) {
         const parent = node.parent;
         if (parent.type === "FRAME") {
@@ -110,8 +139,12 @@ async function onSelectionChange() {
       }
       // If user selected a tab
       if (isTab && label && widthStr) {
-        console.log("[Selection] Switching to Breakpoint:", { label, widthStr });
+        console.log("[Selection] Switching to Breakpoint:", {
+          label,
+          widthStr,
+        });
         const widthNum = parseInt(widthStr, 10);
+        // 22.) this triggers the switchToBreakpoint function
         await switchToBreakpoint(label, widthNum);
         return;
       }
@@ -121,7 +154,6 @@ async function onSelectionChange() {
         return;
       }
     }
-  
   }
   // In this pinned approach, we do not remove the UI if the user selects something else.
   // The UI only goes away if "Close" is selected.
@@ -165,19 +197,24 @@ async function onDocumentChange(changes: DocumentChangeEvent) {
 ////////////////////////////////////////////////////////
 
 async function createFloatingUI(targetFrame: FrameNode) {
-  // Check if the target frame still exists
+  // 9.) Check if the target frame still exists
+  /**
+   * i.) TargetFrame.id -> Retrieves the unique ID of the frame the suer selected.
+   * ii.) figma.getNodeByIdAsync(id) -> Finds a node asynchronously by its ID.
+   * iii.) await -> Ensures the function waits for Figma to return the node before continuing
+   */
   const checkNode = await figma.getNodeByIdAsync(targetFrame.id);
   if (!checkNode) {
     console.error("[FloatingUI] Target frame no longer in document.");
     return;
   }
 
-  // Capture frame geometry to place the UI above
+  // 10.) Capture frame geometry to place the UI above
   const frameX = targetFrame.x;
   const frameY = targetFrame.y;
   const frameWidth = targetFrame.width;
 
-  //Remove existing UI if any
+  //11. Remove existing UI if any
   if (floatingUI && floatingUI.parent) {
     floatingUI.remove();
     floatingUI = null;
@@ -185,7 +222,7 @@ async function createFloatingUI(targetFrame: FrameNode) {
     breakpointsMap.clear();
   }
 
-  // Create a new UI
+  //12.) Create a new UI
   floatingUI = figma.createFrame();
   floatingUI.name = "Floating UI (Pinned)";
   floatingUI.resize(frameWidth, 40);
@@ -202,7 +239,7 @@ async function createFloatingUI(targetFrame: FrameNode) {
   lastFrameX = targetFrame.x;
   lastFrameY = targetFrame.y;
 
-  // Build the segmented Menu
+  //13.) Build the segmented Menu
   await createSegmentedMenu(targetFrame);
 }
 
@@ -213,13 +250,10 @@ async function createFloatingUI(targetFrame: FrameNode) {
 async function createSegmentedMenu(targetFrame: FrameNode) {
   if (!floatingUI) return;
 
-  // Clear prior children
+  //14.)Clear prior children
   floatingUI.children.forEach((child) => child.remove());
 
-  //Load font
-  await figma.loadFontAsync({ family: "Inter", style: "Regular" });
-
-  // Menu Container
+  // 15.) Menu Container
   const menuContainer = figma.createFrame();
   menuContainer.name = "Menu Container";
   menuContainer.layoutMode = "HORIZONTAL";
@@ -237,14 +271,14 @@ async function createSegmentedMenu(targetFrame: FrameNode) {
   menuContainer.cornerRadius = 8;
   floatingUI.appendChild(menuContainer);
 
-  // Breakpoints data
+  // 16. Breakpoints data
   const breakpoints = [
     { label: "Mobile", icon: "📱", width: 375 },
     { label: "Tablet", icon: "📊", width: 768 },
     { label: "Desktop", icon: "💻", width: 1280 },
     { label: "Large Desktop", icon: "🖥", width: 1920 },
   ];
-
+  // 17.) Show breakpoints in menu
   breakpoints.forEach(({ label, icon, width }) => {
     const tab = figma.createFrame();
     tab.name = `${label} Tab`;
@@ -273,10 +307,9 @@ async function createSegmentedMenu(targetFrame: FrameNode) {
 
     menuContainer.appendChild(tab);
     console.log("[createSegmentedMenu] Tab Created:", label, "Width:", width);
-   
   });
 
-  // Close Button
+  // 18.) Close Button for floating ui
   const closeBtn = figma.createFrame();
   closeBtn.name = "Close Button";
   closeBtn.layoutMode = "HORIZONTAL";
@@ -327,17 +360,23 @@ async function switchToBreakpoint(label: string, width: number) {
     return;
   }
   console.log(`Switching/Creating Breakpoint: ${label} (${width}px)`);
-  const pinnedFrame = await figma.getNodeByIdAsync(pinnedFrameId) as FrameNode | null;
+  const pinnedFrame = (await figma.getNodeByIdAsync(
+    pinnedFrameId
+  )) as FrameNode | null;
   if (!pinnedFrame) {
     console.warn("Pinned frame no longer exists.");
     return;
   }
   if (!pinnedFrame) {
-    console.warn("⚠️ [switchToBreakpoint] Pinned frame no longer exists. Aborting switch.");
+    console.warn(
+      "⚠️ [switchToBreakpoint] Pinned frame no longer exists. Aborting switch."
+    );
     return;
   }
 
-  console.log(`✅ [switchToBreakpoint] Pinned Frame Found: ${pinnedFrame.name}`);
+  console.log(
+    `✅ [switchToBreakpoint] Pinned Frame Found: ${pinnedFrame.name}`
+  );
 
   // 1) If we already created it, show it & hide others
   if (breakpointsMap.has(label)) {
@@ -348,6 +387,8 @@ async function switchToBreakpoint(label: string, width: number) {
     breakpointsMap.forEach((f, k) => {
       if (k !== label) f.visible = false;
     });
+
+ 
     return;
   }
 
@@ -367,14 +408,37 @@ async function switchToBreakpoint(label: string, width: number) {
       newFrame.appendChild(clonedChild);
     }
   });
-
+  // Remove pinnedFrame from the canvas 
+ 
   figma.currentPage.appendChild(newFrame);
+  archiveFrame(pinnedFrame); // Moves it out of sight 
   breakpointsMap.set(label, newFrame);
 
   //Hide others
   breakpointsMap.forEach((f, k) => {
     if (k !== label) f.visible = false;
   });
+}
+
+function archiveFrame(pinnedFrame: FrameNode) {
+  const hiddenPage = ensureHiddenPage();
+  hiddenPage.appendChild(pinnedFrame)
+}
+
+function ensureHiddenPage(): PageNode {
+  // Find if we alread created a hidden page
+  const hiddenPage = figma.root.children.find(
+    (child) => child.type === "PAGE" && child.name === "_Archived"
+  ) as PageNode | undefined;
+
+  if(hiddenPage) {
+    return hiddenPage;
+  }
+
+  //Otherwise, create a new one
+  const newPage = figma.createPage();
+  newPage.name="_Archived";
+  return newPage;
 }
 
 // //------------------------------------
