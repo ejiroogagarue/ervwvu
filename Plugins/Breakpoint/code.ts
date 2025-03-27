@@ -12,7 +12,7 @@
 let floatingUI: FrameNode | null = null; // decalre global variable floatingUI
 let pinnedFrameId: string | null = null; // declared Global variable piined frame
 const breakpointsMap = new Map<string, FrameNode>(); //Stores newly-created frames for each Breakpoint
-
+let breakpointsBoard: FrameNode | null = null; // Track our Board
 // Keep track of the frame's last known position for movement checks
 let lastFrameX: number | null = null;
 let lastFrameY: number | null = null;
@@ -26,15 +26,16 @@ let lastFrameY: number | null = null;
  * -> So any tasks that takes time to complete can "wait"
  */
 async function main() {
-  // 2.) Required if you want to use 'documentchange" in incremental mode
+  // 1.1) Required if you want to use 'documentchange" in incremental mode
   /** Figma doesn't automatically load all pages when a plugin starts so to be memort efficinet
    * we use this function , it allows our plugin to tracj changes across all pages without
    * loading everything at once.
    *
    */
   await figma.loadAllPagesAsync();
-
-  // 3. Register "selectionchange"
+  
+  figma.notify("🔹 Select a single frame to begin using Breakpoint.", { timeout: 4000 });
+  // 1.2 -> 2 ) Register "selectionchange"
   // figma.on("selectionchange", onSelectionChange);
   // Debug Test 3.1
   figma.on("selectionchange", async () => {
@@ -51,46 +52,61 @@ main().catch((err) => {
 });
 
 ////////////////////////////////////////////////////////
-// 5.) SELECTION CHANGE HANDLER
+// 2.) SELECTION CHANGE HANDLER
 ////////////////////////////////////////////////////////
 
+
+
 async function onSelectionChange() {
-  // 6.) record selection in figma
   const selection = figma.currentPage.selection;
 
-  // 7) If no pinned UI, and user selected exactly 1 Frame => create pinned UI
+  // If no pinned UI yet, exactly 1 Frame => create pinned UI
   if (!floatingUI && selection.length === 1 && selection[0].type === "FRAME") {
     console.log("[Selection] Creating Floating UI for:", selection[0].name);
-    // 8.) Create Floating ui function is called
-    //Load font before UI creation
     await figma.loadFontAsync({ family: "Inter", style: "Regular" });
     await createFloatingUI(selection[0] as FrameNode);
     return;
   }
 
-  // 19) If we do have a pinned UI, see if user clicked a tab or "Close" button
+  // If pinned UI exists, see if user clicked a tab / close / generateAll, etc.
   if (floatingUI) {
-    /**
-     * 20) This code tracks the Floating UI and its children so we can tell
-     * if a user is interacting with the plugin UI or the Figma canvas. */
-
+    // So we can detect if the user clicked outside pinned UI
     const floatingUIAndChildren: string[] = [floatingUI.id];
-
     floatingUI
       .findAll()
       .forEach((child) => floatingUIAndChildren.push(child.id));
 
     for (const node of selection) {
-      //20.)  Is the node or its parent a tab?
-      const isNodeTab = node.getPluginData("isTab") === "true";
-      const isNodeClose = node.getPluginData("isCloseButton") === "true";
-      const isNodeViewAll = node.getPluginData("isViewAll") === "true";
+      // 1. Read plugin data from the clicked node
+      let isTab = node.getPluginData("isTab") === "true";
+      let isClose = node.getPluginData("isCloseButton") === "true";
+      let isGenerateAll = node.getPluginData("isGenerateAll") === "true";
+      let label = node.getPluginData("breakpoint");
+      let widthStr = node.getPluginData("width");
 
-      let isTab = isNodeTab;
-      let isClose = isNodeClose;
-      let isViewAll = isNodeViewAll;
-      let label: string | null = null;
-      let widthStr: string | null = null;
+      // ─────────────────────────────────────────────────────────────
+      // 2. Parent check logic (in case user clicked on the text)
+      // ─────────────────────────────────────────────────────────────
+      if (!isTab && !isClose && !isGenerateAll && node.parent) {
+        const parent = node.parent;
+        if (parent.type === "FRAME") {
+          const parentIsTab = parent.getPluginData("isTab") === "true";
+          const parentIsClose =
+            parent.getPluginData("isCloseButton") === "true";
+          const parentIsGenerateAll =
+            parent.getPluginData("isGenerateAll") === "true";
+
+          if (parentIsTab) {
+            isTab = true;
+            label = parent.getPluginData("breakpoint");
+            widthStr = parent.getPluginData("width");
+          } else if (parentIsClose) {
+            isClose = true;
+          } else if (parentIsGenerateAll) {
+            isGenerateAll = true;
+          }
+        }
+      }
 
       console.log(
         "[Selection] Node:",
@@ -99,75 +115,86 @@ async function onSelectionChange() {
         isTab,
         "isClose?",
         isClose,
-        "isView?",
-        isViewAll,
+        "isGenerateAll?",
+        isGenerateAll,
         "label:",
         label,
         "widthStr:",
         widthStr
       );
 
-      //21.) If node isn't a tab or close button, check parent
-      /**
-       * This code checks if the selected element is inside a Frame and inherits data from its parent.
-        If the parent is a Breakpoint Tab, it retrieves its label and width.
-         If the parent is the Close Button, it marks it as such.
-       👉 This ensures that clicking on a tab's child element (like text) still counts as selecting the tab itself.
-       */
-      if (!isTab && !isClose && !isViewAll && node.parent) {
-        const parent = node.parent;
-        if (parent.type === "FRAME") {
-          const parentIsTab = parent.getPluginData("isTab") === "true";
-          const parentIsClose =parent.getPluginData("isCloseButton") === "true";
-          const parentIsViewAll = parent.getPluginData("isViewAll") === "true";
-
-          isTab = parentIsTab;
-          isClose = parentIsClose;
-          isViewAll = parentIsViewAll;
-
-          if (parentIsTab) {
-            label = parent.getPluginData("breakpoint");
-            widthStr = parent.getPluginData("width");
-          } else if (parentIsClose) {
-            // It's the close button if the parent says so
-          }
-        }
-      } else if (isTab) {
-        // The node itself is the tab
-        label = node.getPluginData("breakpoint");
-        widthStr = node.getPluginData("width");
-      }
-      // If user selected the close button
+      // ─────────────────────────────────────────────────────────────
+      // 3. Close button
+      // ─────────────────────────────────────────────────────────────
       if (isClose) {
-        console.log("[Selection] Close button clicked. Removing Floating UI.");
+        console.log("[Selection] Close button clicked.");
+        // Optionally arrange frames before leaving
+        // Let them know everything ends here
+        figma.notify(
+          "Closing. Remember, this plugin doesn’t store data. Re-select if you need more changes."
+        );
+        // await arrangeFramesSideBySide();
         removeFloatingUI();
+        figma.closePlugin();
         return;
       }
-      // If user selected a tab
+
+      // ─────────────────────────────────────────────────────────────
+      // 4. Generate All button
+      // ─────────────────────────────────────────────────────────────
+      if (isGenerateAll) {
+        console.log("[Selection] Generate All clicked.");
+        const defaultBPs = [
+          { label: "Mobile", width: 375 },
+          { label: "Tablet", width: 768 },
+          { label: "Desktop", width: 1280 },
+          { label: "Large Desktop", width: 1920 },
+        ];
+        for (const bp of defaultBPs) {
+          if (!breakpointsMap.has(bp.label)) {
+            await switchToBreakpoint(bp.label, bp.width);
+          }
+        }
+       
+        return;
+      }
+
+      // ─────────────────────────────────────────────────────────────
+      // 5. Single breakpoint tab
+      // ─────────────────────────────────────────────────────────────
       if (isTab && label && widthStr) {
         console.log("[Selection] Switching to Breakpoint:", {
           label,
           widthStr,
         });
         const widthNum = parseInt(widthStr, 10);
-        // 22.) this triggers the switchToBreakpoint function
         await switchToBreakpoint(label, widthNum);
         return;
       }
 
-      // If user selected the View All button (do this before any hide-all code)
-      if (isViewAll) {
-        arrangeFramesSideBySide();
-      }
-
-      // If user selected something else in the UI, do nothing
+      // ─────────────────────────────────────────────────────────────
+      // 6. If user selected something else in pinned UI, do nothing
+      // ─────────────────────────────────────────────────────────────
       if (floatingUIAndChildren.includes(node.id)) {
         return;
       }
     }
+
+
+    // 7. 🆕 If the pinned frame is no longer selected, remove the floating UI
+    if (pinnedFrameId) {
+      const stillSelected = selection.find((node) => node.id === pinnedFrameId);
+      if (!stillSelected) {
+        console.log("[Selection] Pinned frame deselected. Removing floating UI.");
+        figma.notify("Floating toolbar removed — reselect a frame to continue.");
+        removeFloatingUI();
+        return;
+      }
+    }
+
   }
-  // In this pinned approach, we do not remove the UI if the user selects something else.
-  // The UI only goes away if "Close" is selected.
+
+  // If pinned UI is active & user picks random other stuff, we ignore it
 }
 
 ////////////////////////////////////////////////////////
@@ -204,11 +231,11 @@ async function onDocumentChange(changes: DocumentChangeEvent) {
 }
 
 ////////////////////////////////////////////////////////
-// CREATE THE PINNED UI
+// 3. CREATE THE PINNED UI
 ////////////////////////////////////////////////////////
 
 async function createFloatingUI(targetFrame: FrameNode) {
-  // 9.) Check if the target frame still exists
+  // 3.1.) Check if the target frame still exists
   /**
    * i.) TargetFrame.id -> Retrieves the unique ID of the frame the suer selected.
    * ii.) figma.getNodeByIdAsync(id) -> Finds a node asynchronously by its ID.
@@ -220,20 +247,19 @@ async function createFloatingUI(targetFrame: FrameNode) {
     return;
   }
 
-  // 10.) Capture frame geometry to place the UI above
+  // 3.2) Capture frame geometry to place the UI above
   const frameX = targetFrame.x;
   const frameY = targetFrame.y;
   const frameWidth = targetFrame.width;
 
-  //11. Remove existing UI if any
+  //3.3). Remove existing UI if any
   if (floatingUI && floatingUI.parent) {
     floatingUI.remove();
     floatingUI = null;
     pinnedFrameId = null;
-    // breakpointsMap.clear();
   }
 
-  //12.) Create a new UI
+  //3.4) Create a new UI
   floatingUI = figma.createFrame();
   floatingUI.name = "Floating UI (Pinned)";
   floatingUI.resize(frameWidth, 40);
@@ -246,27 +272,46 @@ async function createFloatingUI(targetFrame: FrameNode) {
   floatingUI.cornerRadius = 8;
 
   figma.currentPage.appendChild(floatingUI);
+
+  // Immediately let the user know about the ephemeral nature
+  figma.notify(
+    "✅ Floating toolbar added above your selected frame. Use it to generate breakpoints.",
+    { timeout: 4000 }
+  );
+
   pinnedFrameId = targetFrame.id;
   lastFrameX = targetFrame.x;
   lastFrameY = targetFrame.y;
-  // Immediately add the pinnedFrame to the map
-  breakpointsMap.set("Original",targetFrame);
+  //3.5) Immediately add the pinnedFrame to the map
+  breakpointsMap.set("Original", targetFrame);
 
-  //13.) Build the segmented Menu
+  //3.6 -> 4) Build the segmented Menu
   await createSegmentedMenu(targetFrame);
+
+  // Create/Retrieve the board
+  const board = createOrGetBreakpointsBoard();
+
+  // Optionally position the board near the pinned frame
+  // Because the user might delete frames, etc.,
+  // we won't anchor the board to the pinned frame with "documentchange" –
+  // that can be overkill. You can if you want.
+  board.x = targetFrame.x + targetFrame.width + 100; //e.g. 100px to the right
+  board.y = targetFrame.y;
 }
 
 ////////////////////////////////////////////////////////
-// CREATE THE SEGMENTED MENU (BREAKPOINT TABS + CLOSE)
+// 4. CREATE THE SEGMENTED MENU (BREAKPOINT TABS + CLOSE)
 ////////////////////////////////////////////////////////
+
+
 
 async function createSegmentedMenu(targetFrame: FrameNode) {
   if (!floatingUI) return;
 
-  //14.)Clear prior children
   floatingUI.children.forEach((child) => child.remove());
 
-  // 15.) Menu Container
+  await figma.loadFontAsync({ family: "Inter", style: "Regular" });
+
   const menuContainer = figma.createFrame();
   menuContainer.name = "Menu Container";
   menuContainer.layoutMode = "HORIZONTAL";
@@ -278,21 +323,20 @@ async function createSegmentedMenu(targetFrame: FrameNode) {
   menuContainer.fills = [
     { type: "SOLID", color: { r: 1, g: 1, b: 1 }, opacity: 0 },
   ];
-  menuContainer.strokes = [
-    { type: "SOLID", color: { r: 0, g: 0, b: 0 }, opacity: 0.2 },
-  ];
   menuContainer.cornerRadius = 8;
+
   floatingUI.appendChild(menuContainer);
 
-  // 16. Breakpoints data
+  //Default breakpoints
   const breakpoints = [
     { label: "Mobile", icon: "📱", width: 375 },
     { label: "Tablet", icon: "📊", width: 768 },
     { label: "Desktop", icon: "💻", width: 1280 },
     { label: "Large Desktop", icon: "🖥", width: 1920 },
   ];
-  // 17.) Show breakpoints in menu
-  breakpoints.forEach(({ label, icon, width }) => {
+
+  // Creat one tab for each breakpoint
+  for (const { label, icon, width } of breakpoints) {
     const tab = figma.createFrame();
     tab.name = `${label} Tab`;
     tab.layoutMode = "HORIZONTAL";
@@ -305,6 +349,8 @@ async function createSegmentedMenu(targetFrame: FrameNode) {
     tab.cornerRadius = 6;
     tab.fills = [{ type: "SOLID", color: { r: 0.9, g: 0.9, b: 0.9 } }];
     tab.resize(100, 30);
+
+    //Mark it as a tab
     tab.setPluginData("isTab", "true");
     tab.setPluginData("breakpoint", label);
     tab.setPluginData("width", width.toString());
@@ -313,16 +359,34 @@ async function createSegmentedMenu(targetFrame: FrameNode) {
     text.characters = `${icon} ${label}`;
     text.fontSize = 12;
     text.fills = [{ type: "SOLID", color: { r: 0, g: 0, b: 0 } }];
-    // text.setPluginData("isTab", "true");
-    // text.setPluginData("breakpoint", label);
-    // text.setPluginData("width", width.toString());
     tab.appendChild(text);
 
     menuContainer.appendChild(tab);
-    console.log("[createSegmentedMenu] Tab Created:", label, "Width:", width);
-  });
+  }
+  // Generate All button
+  const generateAllBtn = figma.createFrame();
+  generateAllBtn.name = "Generate All Button";
+  generateAllBtn.layoutMode = "HORIZONTAL";
+  generateAllBtn.primaryAxisSizingMode = "AUTO";
+  generateAllBtn.counterAxisSizingMode = "AUTO";
+  generateAllBtn.paddingLeft = 8;
+  generateAllBtn.paddingRight = 8;
+  generateAllBtn.paddingTop = 4;
+  generateAllBtn.paddingBottom = 4;
+  generateAllBtn.cornerRadius = 6;
+  generateAllBtn.fills = [
+    { type: "SOLID", color: { r: 0, g: 0, b: 1 }, opacity: 0.6 },
+  ];
+  generateAllBtn.setPluginData("isGenerateAll", "true");
 
-  // 18.) Close Button for floating ui
+  const genAllText = figma.createText();
+  genAllText.characters = "Generate All";
+  genAllText.fontSize = 12;
+  genAllText.fills = [{ type: "SOLID", color: { r: 1, g: 1, b: 1 } }];
+  generateAllBtn.appendChild(genAllText);
+  menuContainer.appendChild(generateAllBtn);
+
+  // Close button
   const closeBtn = figma.createFrame();
   closeBtn.name = "Close Button";
   closeBtn.layoutMode = "HORIZONTAL";
@@ -345,35 +409,9 @@ async function createSegmentedMenu(targetFrame: FrameNode) {
   closeBtn.appendChild(closeText);
 
   menuContainer.appendChild(closeBtn);
-
-  // View All Button Implementation
-  const viewAllButton = figma.createFrame();
-  viewAllButton.name = "View All";
-  viewAllButton.layoutMode = "HORIZONTAL";
-  viewAllButton.primaryAxisSizingMode = "AUTO";
-  viewAllButton.counterAxisSizingMode = "AUTO";
-  viewAllButton.paddingLeft = 8;
-  viewAllButton.paddingRight = 8;
-  viewAllButton.paddingTop = 4;
-  viewAllButton.paddingBottom = 4;
-  viewAllButton.cornerRadius = 6;
-  viewAllButton.fills = [
-    { type: "SOLID", color: { r: 0, g: 0, b: 1 }, opacity: 0.6 },
-  ];
-  viewAllButton.setPluginData("isViewAll", "true");
-
-  const viewAllText = figma.createText();
-  viewAllText.characters = "View All";
-  viewAllText.fontSize = 12;
-  viewAllText.fills = [{ type: "SOLID", color: { r: 1, g: 1, b: 1 } }];
-  viewAllButton.appendChild(viewAllText);
-
-  // Style it as a button
-  menuContainer.appendChild(viewAllButton);
 }
-
 ////////////////////////////////////////////////////////
-// REMOVE THE PINNED UI
+// 5. REMOVE THE PINNED UI
 ///////////////////////////////////////////////////////
 
 function removeFloatingUI() {
@@ -382,73 +420,141 @@ function removeFloatingUI() {
   }
   floatingUI = null;
   pinnedFrameId = null;
-  // breakpointsMap.clear();
-
   lastFrameX = null;
   lastFrameY = null;
 }
 
 ////////////////////////////////////////////////////////
-// SWITCH TO BREAKPOINT (COPY LAYERS IF NEEDED)
+// 6. SWITCH TO BREAKPOINT (COPY LAYERS IF NEEDED)
 ////////////////////////////////////////////////////////
+
+// async function switchToBreakpoint(label: string, width: number) {
+//   if (!pinnedFrameId) {
+//     console.warn("No pinned Frame to copy from.");
+//     return;
+//   }
+//   console.log(Switching/Creating Breakpoint: ${label} (${width}px));
+//   //6.1)  Retrieve pinned frame
+//   const pinnedFrame = (await figma.getNodeByIdAsync(
+//     pinnedFrameId
+//   )) as FrameNode | null;
+
+//   if (!pinnedFrame) {
+//     console.warn("Pinned frame no longer exists.");
+//     return;
+//   }
+//   if (!pinnedFrame) {
+//     console.warn(
+//       "⚠️ [switchToBreakpoint] Pinned frame no longer exists. Aborting switch."
+//     );
+//     return;
+//   }
+
+//   console.log(
+//     ✅ [switchToBreakpoint] Pinned Frame Found: ${pinnedFrame.name}
+//   );
+
+//   // 6.2) If we already created it, show it & hide others
+//   if (breakpointsMap.has(label)) {
+//     const existingFrame = breakpointsMap.get(label)!;
+//     existingFrame.visible = true;
+
+//     //6.3) Hide all other breakpoints
+//     breakpointsMap.forEach((f, k) => {
+//       if (k !== label) f.visible = false;
+//     });
+
+//     //6.3) Also hide pinnedFrame so there's only one visible design
+
+//     const originalFrame = breakpointsMap.get("Original");
+//     if(originalFrame) {
+//       originalFrame.visible = false;
+//     }
+
+//     return;
+//   }
+
+//   // 4.4) otherwise, create a new Frame & copy layers
+//   const newFrame = figma.createFrame();
+//   console.log("New frame:", newFrame, newFrame?.id, newFrame?.type);
+//   newFrame.name = ${pinnedFrame.name} - ${label};
+//   newFrame.resize(width, pinnedFrame.height);
+//   newFrame.x = pinnedFrame.x + 300; // Offset so we can see it
+//   newFrame.y = pinnedFrame.y;
+//   newFrame.layoutMode = pinnedFrame.layoutMode;
+//   newFrame.fills = JSON.parse(JSON.stringify(pinnedFrame.fills));
+
+//   //4.5) Naive copy of children
+//   pinnedFrame.children.forEach((child) => {
+//     if ("clone" in child && typeof child.clone === "function") {
+//       const clonedChild = child.clone() as SceneNode;
+//       newFrame.appendChild(clonedChild);
+//     }
+//   });
+
+//   // 4.6) Add newFrame to the current page
+//   figma.currentPage.appendChild(newFrame);
+// // 4.7) Store it in breakpointsMap
+//   breakpointsMap.set(label, newFrame);
+//   console.log("[Debug] breakpointsMap.set -> label:", label, " frame:",newFrame.id);
+
+//   if (!breakpointsMap.has(label)) {
+//     breakpointsMap.set(label, newFrame);
+//     console.log("Map after set:", Array.from(breakpointsMap.entries()));
+//   }
+
+//   //4.8) Hide others
+//   breakpointsMap.forEach((frame, key) => {
+//     frame.visible = (key === label);
+//   });
+
+//   //4.9) Hide pinnedFrames so only the new breakpont is visible
+
+//   pinnedFrame.visible = false;
+// }
 
 async function switchToBreakpoint(label: string, width: number) {
   if (!pinnedFrameId) {
     console.warn("No pinned Frame to copy from.");
     return;
   }
+
   console.log(`Switching/Creating Breakpoint: ${label} (${width}px)`);
-  // Retrieve pinned frame
+
   const pinnedFrame = (await figma.getNodeByIdAsync(
     pinnedFrameId
   )) as FrameNode | null;
-
   if (!pinnedFrame) {
     console.warn("Pinned frame no longer exists.");
     return;
   }
-  if (!pinnedFrame) {
-    console.warn(
-      "⚠️ [switchToBreakpoint] Pinned frame no longer exists. Aborting switch."
-    );
-    return;
-  }
 
-  console.log(
-    `✅ [switchToBreakpoint] Pinned Frame Found: ${pinnedFrame.name}`
-  );
+  console.log(`Switching/Creating Breakpoint: ${label} (${width}px)`);
 
-  // 1) If we already created it, show it & hide others
+  // If already in map, just confirm it's visible (we're not hiding anything anyway)
   if (breakpointsMap.has(label)) {
     const existingFrame = breakpointsMap.get(label)!;
-    existingFrame.visible = true;
-
-    // Hide all other breakpoints
-    breakpointsMap.forEach((f, k) => {
-      if (k !== label) f.visible = false;
-    });
-
-    // Also hide pinnedFrame so there's only one visible design 
-    // pinnedFrame.visible = false;
-    const originalFrame = breakpointsMap.get("Original");
-    if(originalFrame) {
-      originalFrame.visible = false;
-    }
-
+    console.log(`Breakpoint '${label}' already exists, Not hiding anything.`);
     return;
   }
 
-  // 2) otherwise, create a new Frame & copy layers
+  // Otherwise create new frame beside pinnedFrame
   const newFrame = figma.createFrame();
-  console.log("New frame:", newFrame, newFrame?.id, newFrame?.type);
   newFrame.name = `${pinnedFrame.name} - ${label}`;
   newFrame.resize(width, pinnedFrame.height);
-  newFrame.x = pinnedFrame.x + 300; // Offset so we can see it
-  newFrame.y = pinnedFrame.y;
+
+  // Copy layout/fills from pinnedFrame if desired
   newFrame.layoutMode = pinnedFrame.layoutMode;
   newFrame.fills = JSON.parse(JSON.stringify(pinnedFrame.fills));
 
-  // Naive copy of children
+  // // Place it at pinnedFrame.x + some offset
+  // newFrame.x = pinnedFrame.x + 300 + breakpointsMap.size * 400;
+  // // ^ or any logic for offset you want
+  // newFrame.y = pinnedFrame.y;
+  // newFrame.layoutMode = pinnedFrame.layoutMode;
+  // newFrame.fills = JSON.parse(JSON.stringify(pinnedFrame.fills));
+
+  // Copy children
   pinnedFrame.children.forEach((child) => {
     if ("clone" in child && typeof child.clone === "function") {
       const clonedChild = child.clone() as SceneNode;
@@ -456,71 +562,55 @@ async function switchToBreakpoint(label: string, width: number) {
     }
   });
 
-  // Add newFrame to the current page 
-  figma.currentPage.appendChild(newFrame);
-// Store it in breakpointsMap
+  // figma.currentPage.appendChild(newFrame);
+  /**Instead of placing it on the page at absolute coords...
+   * figma.currentPage.appendChild(newFrame);
+   * we do this:
+   */
+
+  const board = createOrGetBreakpointsBoard();
+  board.appendChild(newFrame);
+  // Keep track of it
   breakpointsMap.set(label, newFrame);
-  console.log("[Debug] breakpointsMap.set -> label:", label, " frame:",newFrame.id);
+  console.log(
+    "[Debug] breakpointsMap.set -> label:",
+    label,
+    " frame:",
+    newFrame.id
+  );
+  // **** Add this line so each new breakpoint is auto-arranged: ****
+  // await arrangeFramesSideBySide();
+}
 
 
-  if (!breakpointsMap.has(label)) {
-    breakpointsMap.set(label, newFrame);
-    console.log("Map after set:", Array.from(breakpointsMap.entries()));
+
+////////////////////////////////////////////////////////
+//  8.) Returns the existing board or creats a new one
+// You can store plugin data on the board if needed.
+////////////////////////////////////////////////////////
+
+function createOrGetBreakpointsBoard(): FrameNode {
+  // If we already have one that isn't removed, return it
+  if (breakpointsBoard && !breakpointsBoard.removed) {
+    return breakpointsBoard;
   }
 
-  //Hide others
-  breakpointsMap.forEach((frame, key) => {
-    frame.visible = (key === label);
-    // if (key !== label) frame.visible = false;
-  });
+  // otherwise, create a fresh board
+  const board = figma.createFrame();
+  board.name = "Breakpoints Board";
+  board.layoutMode = "HORIZONTAL"; // or "Vetical"
+  board.primaryAxisSizingMode = "AUTO";
+  board.counterAxisSizingMode = "AUTO";
+  board.itemSpacing = 40;
+  board.paddingLeft = 20;
+  board.paddingRight = 20;
+  board.paddingTop = 20;
+  board.paddingBottom = 20;
 
-  //Hide pinnedFrames so only the new breakpont is visible
- 
-  pinnedFrame.visible = false;
+  // Make it transparent or style as you like
+  board.fills = [{ type: "SOLID", color: { r: 1, g: 1, b: 1 }, opacity: 0 }];
+
+  figma.currentPage.appendChild(board);
+  breakpointsBoard = board;
+  return breakpointsBoard;
 }
-
-// function archiveFrame(pinnedFrame: FrameNode) {
-//   const hiddenPage = ensureHiddenPage();
-//   hiddenPage.appendChild(pinnedFrame);
-// }
-
-// function ensureHiddenPage(): PageNode {
-//   // Find if we alread created a hidden page
-//   const hiddenPage = figma.root.children.find(
-//     (child) => child.type === "PAGE" && child.name === "_Archived"
-//   ) as PageNode | undefined;
-
-//   if (hiddenPage) {
-//     return hiddenPage;
-//   }
-
-//   //Otherwise, create a new one
-//   const newPage = figma.createPage();
-//   newPage.name = "_Archived";
-//   return newPage;
-// }
-
-
-
-////////////////////////////////////////////////////////
-// Arrange frames sideBySide
-////////////////////////////////////////////////////////
-
-async function arrangeFramesSideBySide() {
-  console.log("[ViewAll] Arranging breakpoints side by side");
-   let offsetX = 100;
-   let offsetY = 100;
-   let gap = 200;
-
-   //Show every frame in the map, including the Original
-  breakpointsMap.forEach((frame,label) => {
-    console.log(`ViewAll: Making ${label} visible.`);
-    frame.visible = true;
-    frame.x = offsetX;
-    frame.y = offsetY;
-    offsetX += frame.width + gap;
-  });
-  console.log("[ViewAll] Done");
-
-}
-
