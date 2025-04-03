@@ -1,7 +1,3 @@
-
-
-
-
 /* 
 
 VERSION PLUGIN "REFLOW" – Pinned UI + Breakpoint Copy + Moves with Frame
@@ -16,20 +12,19 @@ VERSION PLUGIN "REFLOW" – Pinned UI + Breakpoint Copy + Moves with Frame
 
 /**
  * ______________________________________________
- * 
- * GLOBAL VARIABLES 
+ *
+ * GLOBAL VARIABLES
  * _______________________________________________
  */
-let floatingUI: FrameNode | null = null; 
-let pinnedFrameId: string | null = null; 
-const breakpointsMap = new Map<string, FrameNode>(); 
+let floatingUI: FrameNode | null = null;
+let pinnedFrameId: string | null = null;
+const breakpointsMap = new Map<string, FrameNode>();
 let breakpointsBoard: FrameNode | null = null;
 let lastFrameX: number | null = null;
 let lastFrameY: number | null = null;
-const FLOATING_UI_HEIGHT = 80; 
-const FLOATING_UI_GAP = 10; 
-let lastFrameWidth: number | null = null; 
-
+const FLOATING_UI_HEIGHT = 80;
+const FLOATING_UI_GAP = 10;
+let lastFrameWidth: number | null = null;
 
 ////////////////////////////////////////////////////////
 // 1.) PLUGIN ENTRY
@@ -40,60 +35,58 @@ let lastFrameWidth: number | null = null;
  * -> So any tasks that takes time to complete can "wait"
  */
 async function main() {
-  
-  /** 
+  /**
    * 1.1) Figma.loadAllPagesAsync() - **************FLAGGEDDDDDDDDD******************(Potentially a performance hit)
    * -> It Loads all the pages in the Figma file into memory, so your plugin can see and work with everything , not just the current page."
    * -> we are using this to Track when a pinned frame moves, even if the user switches pages
    * -> Make sure the floating UI doesn’t break due to page changes
    */
 
-  await figma.loadAllPagesAsync();
-
-  /** 
+  // await figma.loadAllPagesAsync();
+  await figma.currentPage.loadAsync();
+  /**
    *   1.2)  This gives the user a clear, friendly prompt right after the plugin launches, so they know what to do next, instead of being confused..
    *   -> figma.notify(...):  Displays a message in Figma's UI (plugin area).
    *   -> "🔹 Select a single frame...": This is the actual text shown to the user.
    *   -> { timeout: 4000 }: The message auto-hides after 4000ms (4 seconds).
-  */
- 
+   */
+
   figma.notify("🔹 Select a single frame to begin using Breakpoint.", {
     timeout: 4000,
   });
 
-
-   /** 
-   *   1.3) This line ensures that your plugin stays reactive to the user's actions. 
-   *   As soon as they select a frame, your plugin can: 
+  /**
+   *   1.3) This line ensures that your plugin stays reactive to the user's actions.
+   *   As soon as they select a frame, your plugin can:
    *   -> Check what was selected.
    *   -> Update the floating UI.
-   *   -> Remove it if nothing is selected 
+   *   -> Remove it if nothing is selected
    *   *********BREAKDOWN OF PARTS*************
-   *   ->"figma.on("selectionchange", ...)": 
+   *   ->"figma.on("selectionchange", ...)":
    *    * This sets up a listener for whenever the user changes their selection in the figma file.
    *   ->"async () => { await onSelectionChange(); }"
    *    * This is an anonymous async function that gets triggered whenever the selection changes
-   *    CALL FUNCTION "onSelectionChange()"" -----> "NUMBER 2 IN FILE " 
-  */
+   *    CALL FUNCTION "onSelectionChange()"" -----> "NUMBER 2 IN FILE "
+   */
 
   figma.on("selectionchange", async () => {
     await onSelectionChange();
   });
-   
+
   /**
    *  1.4)  It allows your UI to follow the selected frame.
    *  -> If the user moves the frame, the floating UI moves with it.
-   *  -> If the frame gets deleted, you can remove or hide the Ui 
+   *  -> If the frame gets deleted, you can remove or hide the Ui
    *  *********BREAKDOWN OF PARTS*************
-   *  -> "figma.on(...)": This sets up an event listener. 
+   *  -> "figma.on(...)": This sets up an event listener.
    *  * In simple terms you are asking figma "HEY LET ME KNOW WHEN THIS HAPPENS".
-   *  -> "documentchange": This is the event. 
+   *  -> "documentchange": This is the event.
    *  * It's triggered anytime the document is edited
-   *  => Position/size changes 
+   *  => Position/size changes
    *  => Layer additions/removals
-   *  => Property Updates (name, fills, etc.)  
+   *  => Property Updates (name, fills, etc.)
    */
-  // 
+  //
   figma.on("documentchange", onDocumentChange);
 }
 
@@ -104,18 +97,40 @@ main().catch((err) => {
 ////////////////////////////////////////////////////////
 // 2.) SELECTION CHANGE HANDLER
 ////////////////////////////////////////////////////////
-
+/**
+ *
+ * This functio listens for changes in the user's selection on the figma canvas.
+ * Its job is to handle what should happen when the user selects something,
+ * especially in the context of youe Floating UI.
+ *  *********BREAKDOWN OF PARTS*************
+ * 1.) FIRST TIME SETUP (NO LOFATING UI YET):
+ * If the user selects one frame, the plugin:
+ * -> Loads the required font "Inter"
+ * -> Creates a flaoting UI (your toolbar) above the frame
+ * -> Exits early so nothing else happens
+ * 2.) ONGOING INTERACTION (FLOATING UI ALREADY EXISTS):
+ * The plugin now starts tracking everythin the user clicks:
+ * -> It figures out whehter the click was on a tab, the close button, or generate all.
+ * -> If the user clicked the text inside a button (instead of the frame itself),
+ * it also checks the parent frame(Clever fallback).
+ * 3.) BASED ON WHAT WAS CLICKED:
+ * -> Close button: Destroys the floating UI and ends the plugin session .
+ * -> Generate All: Creates new breakpoint frames for all defined screen sizes.
+ * -> Single Tab (e.g "Tablet"): Switches to that one frame (either shows or creates it).
+ * -> Rnadom canvas click: Does nothing.
+ * -> Floating UI deselected: Removes the toolbar
+ *
+ */
 async function onSelectionChange() {
-
-   /**
-    * 2.1) This line gets whatever the user has currently selected on the figma canvas
-    *  and stores it in a variable called "selection"
-    *  -> "selection" is used for operations such as 
-    *  => Has the suer selected a frame ?
-    *  => Did they select exactly one item 
-    *  => What kind of element is selected? (frame, text, group)
-    * 
-    */
+  /**
+   * 2.1) This line gets whatever the user has currently selected on the figma canvas
+   *  and stores it in a variable called "selection"
+   *  -> "selection" is used for operations such as
+   *  => Has the suer selected a frame ?
+   *  => Did they select exactly one item
+   *  => What kind of element is selected? (frame, text, group)
+   *
+   */
   const selection = figma.currentPage.selection;
 
   /**
@@ -132,20 +147,20 @@ async function onSelectionChange() {
     await figma.loadFontAsync({ family: "Inter", style: "Regular" });
     /**
      * 2.2 -> 2.) Call the function "CreateFloatingUI()"
-     *     -> Passes in the selected frame 
+     *     -> Passes in the selected frame
      *  *********BREAKDOWN OF PARTS*************
      *     -> "selection[0]": is the first (and only) selected item.
      *     -> "as FrameNode": tells Typescript: "Trust me, this is definitely a frame."
-     * 
+     *
      */
-    
+
     await createFloatingUI(selection[0] as FrameNode);
-    // 2.2 -> 3.) This immediately stops the rest of the function from running 
-    //              after we've created the floating UI. (Important operation) 
+    // 2.2 -> 3.) This immediately stops the rest of the function from running
+    //              after we've created the floating UI. (Important operation)
     return;
   }
 
-  // 2.3 ) This block only runs if your floating UI exists 
+  // 2.3 ) This block only runs if your floating UI exists
   // If FloatingUI exists, see if user clicked a tab / close / generateAll, etc.
   // ********CAN BE SIMPLIFIED BUT FIRST LETS UNDERSTAND**************
   if (floatingUI) {
@@ -154,15 +169,15 @@ async function onSelectionChange() {
     /**
      * 2.3 -> 1.) Know what belongs to the floating UI
      *     -> this collects a list of all node IDs in your floating UI.
-     *     -> "Did the user click something inside the floating toolbar 
+     *     -> "Did the user click something inside the floating toolbar
      *     or somewhere else?"
-     */    
+     */
     const floatingUIAndChildren: string[] = [floatingUI.id];
     floatingUI
       .findAll()
       .forEach((child) => floatingUIAndChildren.push(child.id));
-    
-    /** 2.4 -> 2.) Loop over whatever the user clicked on in the canvas 
+
+    /** 2.4 -> 2.) Loop over whatever the user clicked on in the canvas
      *      -> "selection": This reads from "figma.currentPage.selection" -> Line 2.1
      *      -> the array contains all selected nodes on the canvas frame,group,textbox etc.
      */
@@ -184,92 +199,120 @@ async function onSelectionChange() {
       /**
        * 2.4 -> 4.)   This block is smart fallback logic for handling when the user clicks on the text inside a button, not the button itself
        *     -> If the current node is not already identified as a tab, close, or generateAll button,
-       *     but it has a parent, let’s check the parent.      
+       *     but it has a parent, let’s check the parent.
        */
-    
+
       if (!isTab && !isClose && !isGenerateAll && node.parent) {
-        // 2.4 -> 4 -> 1.) pass parent node  to a variable 
+        // 2.4 -> 4 -> 1.) pass parent node  to a variable
         const parent = node.parent;
         // 2.4 -> 4 -> 2.) We only care if parent is a "Frame"
         if (parent.type === "FRAME") {
+          // 2.4 -> 4 -> 3.) Reading plugin data from the parent node ,
+          // to see if it's tagged as a tab / close / generateAll.
           const parentIsTab = parent.getPluginData("isTab") === "true";
           const parentIsClose =
             parent.getPluginData("isCloseButton") === "true";
           const parentIsGenerateAll =
             parent.getPluginData("isGenerateAll") === "true";
-
+          // 2.4 -> 4 -> 4.) Its is true we update our flgas
           if (parentIsTab) {
+            //2.4 -> 5-> 1.) this is for the tab menu
             isTab = true;
             label = parent.getPluginData("breakpoint");
             widthStr = parent.getPluginData("width");
           } else if (parentIsClose) {
+            // 2.4 -> 5-> 2.) This is for the close button
             isClose = true;
           } else if (parentIsGenerateAll) {
+            // 2.4 -> 5-> 3.) This is for the generateAll Button
             isGenerateAll = true;
           }
         }
       }
 
-
-
       // ─────────────────────────────────────────────────────────────
-      // 3. Close button
+      // 2.5 Close button
+      // Did the user click the Close button?
       // ─────────────────────────────────────────────────────────────
       if (isClose) {
-        console.log("[Selection] Close button clicked.");
-        // Optionally arrange frames before leaving
-        // Let them know everything ends here
+        // 2.5 -> 1.) This shows a temporary message at the bottom of Figma
         figma.notify(
           "Closing. Remember, this plugin doesn’t store data. Re-select if you need more changes."
         );
-        // await arrangeFramesSideBySide();
-        removeFloatingUI();
+        // 2.5 -> 2.) RemoveFloatingUI from the canvas => Access the function @6
+        await removeFloatingUI();
+        // 2.5-> 3.) End plugin session
         figma.closePlugin();
+        // 2.5-> 4.) Stop any remaining code in the function from running
         return;
       }
 
       // ─────────────────────────────────────────────────────────────
-      // 4. Generate All button
+      // 2.6 Generate All button
       // ─────────────────────────────────────────────────────────────
       if (isGenerateAll) {
-        console.log("[Selection] Generate All clicked.");
+        // 2.6 -> 1.)array consisting of all default breakpoints
         const defaultBPs = [
           { label: "Mobile", width: 375 },
           { label: "Tablet", width: 768 },
           { label: "Desktop", width: 1280 },
           { label: "Large Desktop", width: 1920 },
         ];
+
+        let createdCount = 0;
+        // 2.6->2.) Loops through each breakpoints in that list one-by-one
         for (const bp of defaultBPs) {
+          // 2.6-> 3.) if a breakpoint doesn't exist it calls the "switchToBreakpoint" function
           if (!breakpointsMap.has(bp.label)) {
-            await switchToBreakpoint(bp.label, bp.width);
+            try {
+              // 2.6-> 4.) "SwitchToBreakpoint" function -> @7
+              await switchToBreakpoint(bp.label, bp.width);
+              createdCount++;
+            } catch (error) {
+              console.warn(`Failed to create ${bp.label}:`, error);
+            }
           }
+        }
+        // Only show notification if something was actually created
+        if (createdCount > 0) {
+          // In your Generate All handler:
+          figma.notify(
+            `✨ Generated ${createdCount} breakpoint${
+              createdCount !== 1 ? "s" : ""
+            }`,
+            { timeout: 2500 }
+          );
+        } else {
+          figma.notify("All breakpoints already exist", { timeout: 2000 });
         }
 
         return;
       }
 
       // ─────────────────────────────────────────────────────────────
-      // 5. Single breakpoint tab
+      // 2.7 Single breakpoint tab
+      // This runs when the user clicks one of the breakpoint tabs, like "Mobile" or "Desktop".
+      // -> "isTab": is true the user clicked a breakpoint tab.
+      // -> "label": is true ,the label exists like "Mobile" or "Desktop".
+      // -> "widthStr":  exists the string version of the width (e.g. "768").
       // ─────────────────────────────────────────────────────────────
       if (isTab && label && widthStr) {
-        console.log("[Selection] Switching to Breakpoint:", {
-          label,
-          widthStr,
-        });
+        // 2.7 -> 1) converts string into number "so you can use it resize a frame "
         const widthNum = parseInt(widthStr, 10);
+        // 2.7 -> 2) passes the label and widthNum to the switchToBreakpoint function @7
         await switchToBreakpoint(label, widthNum);
         return;
       }
 
       // ─────────────────────────────────────────────────────────────
-      // 6. If user selected something else in pinned UI, do nothing
+      // 2.8 If user selected something else in pinned UI, do nothing
       // ─────────────────────────────────────────────────────────────
       if (floatingUIAndChildren.includes(node.id)) {
         return;
       }
     }
 
-    // 7. 🆕 If the pinned frame is no longer selected, remove the floating UI
+    // 2.9 🆕 If the pinned frame is no longer selected, remove the floating UI
     if (pinnedFrameId) {
       const stillSelected = selection.find((node) => node.id === pinnedFrameId);
       if (!stillSelected) {
@@ -279,7 +322,7 @@ async function onSelectionChange() {
         figma.notify(
           "Floating toolbar removed — reselect a frame to continue."
         );
-        removeFloatingUI();
+        await removeFloatingUI();
         return;
       }
     }
@@ -289,79 +332,63 @@ async function onSelectionChange() {
 }
 
 ////////////////////////////////////////////////////////
-// DOCUMENT CHANGE HANDLER - move pinned UI if the frame moves
+// 3.) DOCUMENT CHANGE HANDLER - move pinned UI if the frame moves
 ////////////////////////////////////////////////////////
 
+/**
+ * Whenever you move or resize the pinned frame,
+ * this function makes sure the floating toolbar follows it,
+ * resizes correctly, and looks consistent.
+ * It only does something if there's actually a change
+ */
 async function onDocumentChange(changes: DocumentChangeEvent) {
-  // If there's no inned frame, or no floating UI, we skip
+  // 3.1) If there's no inned frame, or no floating UI, we skip
   if (!pinnedFrameId || !floatingUI) return;
 
-  // Get the pinned frame
-  const pinnedFrame = (await figma.getNodeByIdAsync(
-    pinnedFrameId
-  )) as FrameNode | null;
-  if (!pinnedFrame) return; // The pinned frame might be gone
+  /**
+   * 3.2)  Get the pinned frameand capture its ID
+   * -> Find the frame (by its ID) that we previously saved,
+   * and treat it as a FrameNodeor null if it’s not found.
+   */
 
-  // Check for both position and size changes
+  // const pinnedFrame = (await figma.getNodeByIdAsync(
+  //   pinnedFrameId
+  // )) as FrameNode | null;
+  const pinnedFrame = figma.getNodeById(pinnedFrameId) as FrameNode | null;
+
+  // 3.3) If deleted stop function operation
+  if (!pinnedFrame) {
+    await removeFloatingUI();
+    return;
+  } // The pinned frame might be gone
+
+  // 3.4 Check for both position and size changes
   const didMove = pinnedFrame.x !== lastFrameX || pinnedFrame.y !== lastFrameY;
   const didResize = pinnedFrame.width !== lastFrameWidth;
 
+  // 3.5 ) If true
   if (didMove || didResize) {
-    // Update floating UI position
+    // 3.5 -> 1.) Update floating UI position
     floatingUI.x = pinnedFrame.x;
     floatingUI.y = pinnedFrame.y - FLOATING_UI_HEIGHT - FLOATING_UI_GAP;
 
-    // Resize floating UI if frame width changed
+    //3.5-> 2.)  Resize floating UI if frame width changed
     if (didResize) {
       floatingUI.resize(pinnedFrame.width, FLOATING_UI_HEIGHT);
+      // 3.5-> 3.) this function is called to make sure button still looks good on resize
+      // -> its a helper function HELPER 01.)
       updateButtonSizes(pinnedFrame.width); // Update button sizes
       lastFrameWidth = pinnedFrame.width; // Store new width
     }
 
-    // Update last known position
+    //3.5-> 3.)  Update last known position
     lastFrameX = pinnedFrame.x;
     lastFrameY = pinnedFrame.y;
   }
 }
 
-function updateButtonSizes(toolbarWidth: number) {
-  if (!floatingUI) return;
-
-  // Resize action buttons (top row)
-  const actionRow = floatingUI.findOne(
-    (node) => node.name === "Action Row"
-  ) as FrameNode;
-  if (actionRow) {
-    actionRow.children.forEach((btn) => {
-      if (btn.type === "FRAME") {
-        const isActionBtn = ["isGenerateAll", "isCloseButton"].some(
-          (type) => btn.getPluginData(type) === "true"
-        );
-        btn.resize(
-          Math.max(
-            isActionBtn ? 100 : 80,
-            toolbarWidth * (isActionBtn ? 0.2 : 0.15)
-          ),
-          32
-        );
-      }
-    });
-  }
-
-  // Resize breakpoint tabs (bottom row)
-  const tabsRow = floatingUI.findOne(
-    (node) => node.name === "Tabs Row"
-  ) as FrameNode;
-  if (tabsRow) {
-    tabsRow.children.forEach((tab) => {
-      if (tab.type === "FRAME") {
-        tab.resize(Math.max(80, toolbarWidth * 0.15), 32);
-      }
-    });
-  }
-}
 ////////////////////////////////////////////////////////
-// 3. CREATE THE PINNED UI
+// 4.) CREATE THE PINNED UI
 ////////////////////////////////////////////////////////
 
 async function createFloatingUI(targetFrame: FrameNode) {
@@ -372,18 +399,19 @@ async function createFloatingUI(targetFrame: FrameNode) {
    * iii.) await -> Ensures the function waits for Figma to return the node before continuing
    */
   const checkNode = await figma.getNodeByIdAsync(targetFrame.id);
+  // 3.2) Check to see if the node exists
   if (!checkNode) {
     console.error("[FloatingUI] Target frame no longer in document.");
     return;
   }
 
-  // 3.2) Capture frame geometry to place the UI above
+  // 3.3) Get the position and size of the frame
   const frameX = targetFrame.x;
   const frameY = targetFrame.y;
   const frameWidth = targetFrame.width;
   lastFrameWidth = targetFrame.width;
   const floatingUIHeight = 80;
-  //3.3). Remove existing UI if any
+  //3.4) Remove old toolbar if it exists
   if (floatingUI && floatingUI.parent) {
     floatingUI.remove();
     floatingUI = null;
@@ -409,10 +437,21 @@ async function createFloatingUI(targetFrame: FrameNode) {
   statusText.y = 6; // Vertical center
   statusText.fills = [{ type: "SOLID", color: { r: 0.2, g: 0.2, b: 0.2 } }];
   statusBar.appendChild(statusText);
-  
 
-  
+  // UPDATE TEST
+  // targetFrame.strokes = [
+  //   {
+  //     type: "SOLID",
+  //     color: { r: 1, g: 0.8, b: 0.196 }, // Your brand yellow
+  //     opacity: 1,
+  //   },
+  // ];
+  // targetFrame.strokeWeight = 2;
+  // targetFrame.strokeAlign = "OUTSIDE";
+  // targetFrame.dashPattern = [6, 3]; // alternating 5px dashes and gaps
 
+  // Expand frame bounds to prevent content clipping
+  // targetFrame.resize(targetFrame.width + 4, targetFrame.height + 4);
 
   //3.4) Create a new UI
   floatingUI = figma.createFrame();
@@ -486,7 +525,7 @@ async function createFloatingUI(targetFrame: FrameNode) {
 }
 
 ////////////////////////////////////////////////////////
-// 4. CREATE THE SEGMENTED MENU (BREAKPOINT TABS + CLOSE)
+// 5.)  CREATE THE SEGMENTED MENU (BREAKPOINT TABS + CLOSE)
 ////////////////////////////////////////////////////////
 
 async function createSegmentedMenu(targetFrame: FrameNode) {
@@ -615,7 +654,7 @@ function optimizeLabelForWidth(label: string, width: number): string {
   // Icon-only mode for narrow buttons
   const iconMap: Record<string, string> = {
     Mobile: "📱",
-    Tablet: "📊",
+    Tablet: "🔲",
     Desktop: "💻",
     "Large Desktop": "🖥",
     "Generate All": "⚡",
@@ -624,20 +663,40 @@ function optimizeLabelForWidth(label: string, width: number): string {
   return iconMap[label] || label.split(" ")[0]; // Fallback to first word
 }
 ////////////////////////////////////////////////////////
-// 5. REMOVE THE PINNED UI
+// 6.)  REMOVE THE PINNED UI
 ///////////////////////////////////////////////////////
 
 async function removeFloatingUI() {
   if (floatingUI?.parent) floatingUI.remove();
-  // Clean ONLY the glow effect from target frame
-  
+  // Remove dash from target frame
+  // if (pinnedFrameId) {
+  //   try {
+  //     const targetFrame = (await figma.getNodeByIdAsync(
+  //       pinnedFrameId
+  //     )) as FrameNode | null;
+  //     if (targetFrame && !targetFrame.removed) {
+  //       // Remove dash and any related effects
+  //       targetFrame.strokes = [];
+  //       targetFrame.paddingLeft = 0;
+  //       targetFrame.paddingRight = 0;
+  //       targetFrame.paddingTop = 0;
+  //       targetFrame.paddingBottom = 0;
+  //     }
+  //   } catch (error) {
+  //     console.warn("Couldn't clean up target frame:", error);
+  //   }
+  // }
+
   // Reset State
   floatingUI = null;
   pinnedFrameId = null;
+  lastFrameX = null;
+  lastFrameY = null;
+  lastFrameWidth = null;
 }
 
 ////////////////////////////////////////////////////////
-// 6. SWITCH TO BREAKPOINT (COPY LAYERS IF NEEDED)
+// 7. SWITCH TO BREAKPOINT (COPY LAYERS IF NEEDED)
 ////////////////////////////////////////////////////////
 
 async function switchToBreakpoint(label: string, width: number) {
@@ -705,8 +764,18 @@ async function switchToBreakpoint(label: string, width: number) {
     " frame:",
     newFrame.id
   );
-  // **** Add this line so each new breakpoint is auto-arranged: ****
-  // await arrangeFramesSideBySide();
+
+  // After successful creation
+  const friendlyMessages: Record<string, string> = {
+    Mobile: "📱 Mobile breakpoint created (375px)",
+    Tablet: "🔲 Tablet breakpoint created (768px)",
+    Desktop: "💻 Desktop breakpoint created (1280px)",
+    "Large Desktop": "🖥 Large Desktop breakpoint created (1920px)",
+  };
+
+  figma.notify(friendlyMessages[label] || `✅ ${label} breakpoint created`, {
+    timeout: 2000, // 2 seconds
+  });
 }
 
 ////////////////////////////////////////////////////////
@@ -726,16 +795,106 @@ function createOrGetBreakpointsBoard(): FrameNode {
   board.layoutMode = "HORIZONTAL"; // or "Vetical"
   board.primaryAxisSizingMode = "AUTO";
   board.counterAxisSizingMode = "AUTO";
-  board.itemSpacing = 40;
+  board.itemSpacing = 100;
   board.paddingLeft = 20;
   board.paddingRight = 20;
   board.paddingTop = 20;
   board.paddingBottom = 20;
+  board.strokes = [
+    {
+      type: "SOLID",
+      color: {
+        r: 1.0, // Max red (for warmth)
+        g: 0.85, // Slightly less green to avoid neon
+        b: 0.0, // Zero blue for pure yellow
+      },
+      opacity: 1,
+    },
+  ];
+  board.strokeWeight = 4;
+  board.strokeAlign = "OUTSIDE";
+  board.dashPattern = [8, 4]; // alternating 5px dashes and gaps
 
   // Make it transparent or style as you like
-  board.fills = [{ type: "SOLID", color: { r: 1, g: 1, b: 1 }, opacity: 0 }];
+  // Frosted glass effect
+  board.fills = [
+    {
+      type: "SOLID",
+      color: { r: 0.97, g: 0.97, b: 0.97 }, // Near-white light gray
+      opacity: 0.95, // Slight transparency
+    },
+  ];
+
+  // // Blur effect (frosted glass)
+  board.effects = [
+    {
+      type: "BACKGROUND_BLUR",
+      radius: 12, // Increased from 8 for stronger blur
+      visible: true,
+    },
+    // Drop shadow with better visibility
+    {
+      type: "DROP_SHADOW",
+      color: { r: 0, g: 0, b: 0, a: 0.25 }, // Darker opacity (0.25 instead of 0.2)
+      offset: { x: 0, y: 4 }, // Larger Y-offset for depth
+      radius: 12, // Softer shadow (increased from 8)
+      spread: 0, // Optional: Adds hardness to the shadow if needed
+      visible: true,
+      blendMode: "NORMAL",
+    },
+  ];
 
   figma.currentPage.appendChild(board);
   breakpointsBoard = board;
   return breakpointsBoard;
+}
+
+////////////////////////////////////////////////////////
+//  HELPER FUNCTIONS
+////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////
+// HELPER 01.) UPDATE BUTTON SIZES
+////////////////////////////////////////////////////////
+/**
+ * 
+ *-> With floatingUi width changes this functions ensures the buttons 
+ scale appropriately 
+ */
+
+function updateButtonSizes(toolbarWidth: number) {
+  if (!floatingUI) return;
+
+  // 1.) Resize action buttons (top row)
+  const actionRow = floatingUI.findOne(
+    (node) => node.name === "Action Row"
+  ) as FrameNode;
+  if (actionRow) {
+    actionRow.children.forEach((btn) => {
+      if (btn.type === "FRAME") {
+        const isActionBtn = ["isGenerateAll", "isCloseButton"].some(
+          (type) => btn.getPluginData(type) === "true"
+        );
+        btn.resize(
+          Math.max(
+            isActionBtn ? 100 : 80,
+            toolbarWidth * (isActionBtn ? 0.2 : 0.15)
+          ),
+          32
+        );
+      }
+    });
+  }
+
+  // 2.) Resize breakpoint tabs (bottom row)
+  const tabsRow = floatingUI.findOne(
+    (node) => node.name === "Tabs Row"
+  ) as FrameNode;
+  if (tabsRow) {
+    tabsRow.children.forEach((tab) => {
+      if (tab.type === "FRAME") {
+        tab.resize(Math.max(80, toolbarWidth * 0.15), 32);
+      }
+    });
+  }
 }
