@@ -1,0 +1,7 @@
+<script>
+    window.onmessage = (event) => {
+        if(event.data.pluginMessage.type === 'LAYOUT_ANALYSIS') {
+            console.log("🐶 Live Results:", event.data.pluginMessage.layout);
+        }
+    };
+</script>
