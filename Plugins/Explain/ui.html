@@ -1,7 +1,15 @@
 <script>
-    window.onmessage = (event) => {
-        if(event.data.pluginMessage.type === 'LAYOUT_ANALYSIS') {
-            console.log("🐶 Live Results:", event.data.pluginMessage.layout);
-        }
-    };
+  window.onmessage = (event) => {
+    console.log("Received in UI:", event.data);
+  };
+
+  window.onmessage = (event) => {
+   const message = event.data.pluginMessage;
+   if (message?.type === "CODE_GENERATED") {
+    document.getElementById("output").innerHTML = 
+    `<pre>${JSON.stringify(message.payload, null, 2)}</pre>`;
+   }
+  };
 </script>
+
+<div></div>
