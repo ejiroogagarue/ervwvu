@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      body {
+        font: 13px/1, 4 Inter, sans-serif;
+        margin: 0;
+      }
+      #title {
+        font-weight: 600;
+        padding: 12px 16px;
+        border-bottom: 1px solid #eee;
+      }
+      #list {
+        padding: 6px 0 14px;
+      }
+      .row {
+        padding: 4px 16px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+      }
+      .row:hover {
+        background: #f5f5f5;
+      }
+      .warn {
+        color: #d33;
+        font-size: 11px;
+        margin-left: 4px;
+      }
+      .pill {
+        font-size: 10px;
+        border-radius: 4px;
+        padding: 0 4px;
+        margin-left: auto;
+      }
+      .grid {
+        background: #2196f3;
+        color: #fff;
+      }
+      .flex {
+        background: #4caf50;
+        color: #fff;
+      }
+      .block {
+        background: #ffc107;
+      }
+      .mis {
+        color: #ff9800;
+        font-size: 11px;
+        margin-left: 4px;
+      }
+      .grp {
+        color: #e6a700;
+        font-size: 11px;
+        margin-left: 4px;
+      }
+      #summary-panel {
+        display: none;
+        padding: 12px 16px;
+        border-bottom: 1px solid #eee;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="title">Layra Layers</div>
+    <div
+      id="summary-panel"
+      style="padding: 12px 16px; border-bottom: 1px solid #eee"
+    >
+      <!-- Order Warning -->
+      <div
+        id="order-warning"
+        style="display: none; color: #ff9800; margin-bottom: 8px"
+      >
+        🔁 Order mismatch detected
+        <button
+        id="fix-order-btn"
+          style="
+            margin-left: 8px;
+            background: #18a0fb;
+            color: white;
+            border: none;
+            padding: 2px 8px;
+            border-radius: 4px;
+          "
+        >
+          Fix Order
+        </button>
+      </div>
+
+      <!-- Rename Needed -->
+      <div
+        id="rename-warning"
+        style="display: none; color: #d33; margin-bottom: 8px"
+      >
+        ✍️ <span id="rename-count">0</span> layers need better names
+      </div>
+
+      <!-- Group Suggestion -->
+      <div id="group-suggestion" style="display: none; color: #e6a700">
+        ⧉ Grouping opportunity found
+      </div>
+
+      <!-- Empty State -->
+      <div id="empty-state" style="display: none; color: #4caf50">
+        ✅ No issues detected
+      </div>
+    </div>
+    <div id="list"></div>
+
+    <script>
+      const list = document.getElementById("list");
+      onmessage = ({ data }) => {
+        const msg = data.pluginMessage;
+        if (!msg) return;
+        if (msg.type === "CLEAR") {
+          list.innerHTML = "";
+          return;
+        }
+        if (msg.type !== "AUDIT_DATA") return;
+
+        const { frameName, layers } = msg.payload;
+        document.getElementById("title").textContent = "Layra -" + frameName;
+        list.innerHTML = "";
+        document.getElementById("summary-panel").style.display = "block";
+
+        // Calculate warnings
+        let renameCount = 0;
+        let hasOrderWarning = false;
+        let hasGroupSuggestion = false;
+
+        function checkNode(node) {
+          if (node.badName) renameCount++;
+          if (node.mismatch) hasOrderWarning = true;
+          if (node.suggestGroup) hasGroupSuggestion = true;
+          node.children.forEach(checkNode);
+        }
+
+        layers.forEach(checkNode);
+
+        // Update summary panel
+        document.getElementById("order-warning").style.display = hasOrderWarning
+          ? "flex"
+          : "none";
+
+        document.getElementById("rename-warning").style.display =
+          renameCount > 0 ? "flex" : "none";
+
+        document.getElementById("rename-count").textContent = renameCount;
+        document.getElementById("group-suggestion").style.display =
+          hasGroupSuggestion ? "flex" : "none";
+        document.getElementById("empty-state").style.display =
+          !hasOrderWarning && !hasGroupSuggestion && renameCount === 0
+            ? "flex"
+            : "none";
+
+        function renderNode(node, depth = 0) {
+          const row = document.createElement("div");
+          row.className = "row";
+          row.style.paddingLeft = 16 + depth * 12 + "px";
+          row.innerHTML = `
+           ${node.name || "(unnamed)"}
+           <span class="icon-jump" style="opacity:0; margin-left: 4px; font-size: 11px;">↗</span>
+          `;
+
+          // Add hover effects via JS 9avoid CSS changes)
+          row.addEventListener("mouseenter", () => {
+            row.querySelector(".icon-jump").style.opacity = "1";
+            row.style.backgroundColor = "#f5f5f5";
+          });
+          row.addEventListener("mouseleave", () => {
+            row.querySelector(".icon-jump").style.opacity = "0";
+            row.style.backgroundColor = "";
+          });
+
+          if (node.badName) {
+            const w = document.createElement("span");
+            w.className = "warn";
+            w.textContent = "⚠ rename";
+            w.title = "Generic name like 'Frame 1' detected"; // Native tooltip
+            row.appendChild(w);
+          }
+
+
+          if (node.suggestGroup) {
+            const g = document.createElement("span");
+            g.className = "grp";
+            g.textContent = "⧉ group?";
+            g.title = "Layers are aligned with uniform spacing (8-24px)";
+            row.appendChild(g);
+          }
+
+          const pill = document.createElement("span");
+          pill.className = "pill " + node.layout;
+          pill.textContent = node.layout;
+          row.appendChild(pill);
+
+          row.onclick = () =>
+            parent.postMessage(
+              { pluginMessage: { type: "SELECT_LAYER", id: node.id } },
+              "*"
+            );
+          row.ondblclick = () => {
+            const newName = prompt("New name:", node.name);
+            if (newName)
+              parent.postMessage(
+                {
+                  pluginMessage: { type: "RENAME_LAYER", id: node.id, newName },
+                },
+                "*"
+              );
+          };
+          list.appendChild(row);
+
+          node.children.forEach((child) => renderNode(child, depth + 1));
+        }
+
+        layers[0].children.forEach((child) => renderNode(child));
+
+        document.getElementById("fix-order-btn")?.addEventListener("click", () => {
+          parent.postMessage({ pluginMessage: {type: "FIX_ORDER"}}, "*");
+        });
+
+
+      };
+    </script>
+  </body>
+</html>
