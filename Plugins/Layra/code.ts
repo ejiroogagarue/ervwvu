@@ -31,7 +31,22 @@ const COLORS = {
   blue: { r: 0.18, g: 0.55, b: 1 },
 } as const;
 
+const layoutCache = new Map<string, LayoutAnalysis>();
+
 type MarkColor = keyof typeof COLORS;
+
+// Helper: generate breadcrumbs
+function generateBreadcrumbs(node: SceneNode) {
+  const breadcrumbs = [];
+  let current: BaseNode | null = node;
+
+  while (current && current.type !== "PAGE") {
+    breadcrumbs.unshift({ id: current.id, name: current.name });
+    current = current.parent;
+  }
+
+  return breadcrumbs;
+}
 
 ////////////////////////////////////////////////////////
 // Interface
@@ -50,7 +65,7 @@ interface LayoutAnalysis {
 interface NodeInfo {
   id: string;
   name: string;
-  layout: string; // flex | grid |block
+  layout: string; // Only "auto", "suggest", or "" (empty string if irrelevant)
   badName: boolean;
   children: NodeInfo[];
   mismatch: boolean; // New property
@@ -155,9 +170,13 @@ function guessGapBetweenChildren(node: FrameNode | GroupNode): number {
  * -> CSS Grid: ELements arranged in evenly spaced rows and columns.
  */
 function sniffLayout(node: SceneNode): LayoutAnalysis {
+   const cached = layoutCache.get(node.id);
+   if(cached) return cached;
+
   const base: LayoutAnalysis = { type: "block" };
   // Only frames/groups can be flex/grid
   if (!isFrameOrGroup(node)) {
+    layoutCache.set(node.id, base);
     return base;
   }
 
@@ -176,22 +195,36 @@ function sniffLayout(node: SceneNode): LayoutAnalysis {
     base.type = "grid";
     base.gap = guessGapBetweenChildren(node);
   }
-
+  
+  layoutCache.set(node.id, base);
   return base;
+
+
+
 }
 
 ////////////////////////////////////////////////////////
 // Annotate Block
 ////////////////////////////////////////////////////////
-async function annotateBlock(node: SceneNode, color: MarkColor, label: string) {
+async function annotateBlock(
+  node: SceneNode,
+  color: MarkColor,
+  label: string,
+  role?: "applied" | "suggest"
+) {
   const [absX, absY] = [
     node.absoluteTransform[0][2],
     node.absoluteTransform[1][2],
   ];
-
+  // -- Set role directly on original node (CRITICAL FIX) --
+  if (role) {
+    node.setPluginData("layra-role", role);
+  }
   // -- Outline frame ---------------------------------------------------------
   const outline = figma.createFrame();
   outline.setPluginData("layra", "1");
+  outline.setPluginData("layra-role", role || "");
+  outline.setPluginData("layra-target", node.id);
   outline.name = `Layra: ${label}`;
   outline.x = absX;
   outline.y = absY;
@@ -230,10 +263,50 @@ async function annotateBlock(node: SceneNode, color: MarkColor, label: string) {
   Layra ▶ sidebar bridge
 ───────────────────────────────────────────────────────────────*/
 function nodeInfo(node: SceneNode): NodeInfo {
+  // return {
+  //   id: node.id,
+  //   name: node.name,
+  //   layout: sniffLayout(node).type, // flex | grid | block
+  //   badName: /^(group|frame|rectangle|vector|text)\s?\d*$/i.test(
+  //     node.name.trim()
+  //   ),
+  //   children: isFrameOrGroup(node)
+  //     ? node.children
+  //         .filter((c) => c.visible)
+  //         .sort((a, b) => a.y - b.y || a.x - b.x)
+  //         .map(nodeInfo)
+  //     : [],
+  //   mismatch: isFrameOrGroup(node) ? visualOrderMismatch(node) : false,
+  //   suggestGroup:
+  //     isFrameOrGroup(node) &&
+  //     node.children.length >= 2 &&
+  //     (() => {
+  //       const c = node.children.filter((ch) => ch.visible);
+  //       if (c.length < 2) return false; // Add this check
+  //       const aligned = c.every((ch) => Math.abs(ch.x - c[0].x) < 2);
+  //       const gaps = c.slice(1).map((ch, i) => ch.y - (c[i].y + c[i].height));
+  //       const uniform = gaps.every((g) => g >= 8 && g <= 24);
+  //       return (
+  //         aligned &&
+  //         uniform &&
+  //         (node.type === "FRAME" ? node.layoutMode === "NONE" : true)
+  //       );
+  //     })(),
+  // };
+
+  const sniffed = sniffLayout(node);
+  const isAutoLayout = hasLayoutMode(node) && node.layoutMode !== "NONE";
+
   return {
     id: node.id,
     name: node.name,
-    layout: sniffLayout(node).type, // flex | grid | block
+    layout: isAutoLayout
+      ? "auto"
+      : sniffed.type === "grid"
+      ? "suggest"
+      : isFrameOrGroup(node) && node.children.length > 1
+      ? "suggest"
+      : "",
     badName: /^(group|frame|rectangle|vector|text)\s?\d*$/i.test(
       node.name.trim()
     ),
@@ -294,6 +367,21 @@ function buildAuditPayload(frame: FrameNode) {
 
 // Send payload to UI
 function postToUI(frame: FrameNode) {
+  // Clear existing cache
+  layoutCache.clear();
+
+ //Refresh all nested elements
+ function refreshRoles(node: SceneNode) {
+  if(node.type === "FRAME") {
+    const role = node.layoutMode !== "NONE" ? "applied" : "suggest";
+    node.setPluginData("layra-role", role);
+  }
+  if("children" in node) {
+    node.children.forEach(refreshRoles);
+  }
+ }
+
+ refreshRoles(frame);
   figma.ui.postMessage({
     type: "AUDIT_DATA",
     payload: buildAuditPayload(frame),
@@ -302,15 +390,36 @@ function postToUI(frame: FrameNode) {
 
 figma.ui.onmessage = (msg) => {
   if (msg.type === "SELECT_LAYER") {
-    const node = figma.getNodeById(msg.id) as SceneNode;
-    if (node) {
-      figma.currentPage.selection = [node];
-      figma.viewport.scrollAndZoomIntoView([node]);
-    }
+    figma.getNodeByIdAsync(msg.id).then((node) => {
+      if (node && node.type !== "PAGE") {
+        const sceneNode = node as SceneNode;
+        figma.currentPage.selection = [sceneNode];
+        figma.viewport.scrollAndZoomIntoView([sceneNode]);
+      }
+    });
   }
   if (msg.type === "RENAME_LAYER") {
-    const node = figma.getNodeById(msg.id) as SceneNode;
-    if (node) node.name = msg.newName;
+    figma.getNodeByIdAsync(msg.id).then((node) => {
+      if (node && node.type !== "PAGE" && "name" in node) {
+        const sceneNode = node as SceneNode;
+        const parent = sceneNode.parent;
+        if (parent && "children" in parent) {
+          const index = parent.children.indexOf(sceneNode);
+          node.name = msg.newName;
+          parent.insertChild(index, sceneNode); // keeps position
+        } else {
+          sceneNode.name = msg.newName;
+        }
+
+        postToUI(figma.currentPage.selection[0] as FrameNode);
+      }
+    });
+  }
+
+  if (msg.type === "REQUEST_REFRESH") {
+    if (figma.currentPage.selection.length === 1) {
+      postToUI(figma.currentPage.selection[0] as FrameNode);
+    }
   }
   if (msg.type === "FIX_ORDER") {
     const frame = figma.currentPage.selection[0] as FrameNode;
@@ -335,10 +444,36 @@ figma.ui.onmessage = (msg) => {
           if (layout.type === "grid") {
             annotateBlock(child, "blue", "Grid ✓");
           } else if (isFrameOrGroup(child) && child.children.length > 1) {
-            annotateBlock(child, "yellow", "Try Auto Layout");
+            annotateBlock(child, "yellow", "Try Auto Layout", "suggest");
           }
         }
       });
+    }
+  }
+
+  if (msg.type === "APPLY_AUTO") {
+    const node = figma.getNodeById(msg.id);
+    if (node?.type === "FRAME") {
+      const layout = sniffLayout(node);
+      //Smart direction detection
+      const isHorizontal = node.children.every(
+        (c, i, arr) => i === 0 || c.x > arr[i - 1].x + arr[i - 1].width
+      );
+
+      node.layoutMode = isHorizontal ? "HORIZONTAL" : "VERTICAL";
+      node.primaryAxisAlignItems = "SPACE_BETWEEN";
+      node.itemSpacing = 8;
+
+      // Update nested roles
+      node.setPluginData("layra-role", "applied");
+    }
+  }
+
+  if (msg.type === "REMOVE_AUTO") {
+    const node = figma.getNodeById(msg.id);
+    if (node && node.type === "FRAME" && "layoutMode" in node) {
+      node.layoutMode = "NONE";
+      postToUI(figma.currentPage.selection[0] as FrameNode);
     }
   }
 };
@@ -350,6 +485,30 @@ figma.on("selectionchange", async () => {
   clearLayraArtifacts();
 
   const sel = figma.currentPage.selection;
+
+  if (sel.length === 1) {
+    const node = sel[0];
+    const layout = sniffLayout(node);
+    const role =
+      node.getPluginData("layra-role") ||
+      (layout.type === "flex"
+        ? "applied"
+        : layout.type === "grid"
+        ? "suggest"
+        : "");
+
+    figma.ui.postMessage({
+      type: "SECTION_CONTEXT",
+      payload: {
+        role: node.type === "FRAME" ? role : "", // Only show for frames
+        targetId: node.id,
+        targetName: node.name,
+        breadcrumbs: generateBreadcrumbs(node),
+        children: isFrameOrGroup(node) ? node.children.map(nodeInfo) : [],
+      },
+    });
+  }
+
   if (sel.length !== 1 || sel[0].type !== "FRAME") {
     figma.ui.postMessage({ type: "CLEAR" });
     return;
@@ -364,7 +523,7 @@ figma.on("selectionchange", async () => {
 
     // If child is itself a frame with Auto Layout -> green
     if (child.type === "FRAME" && child.layoutMode !== "NONE") {
-      annotateBlock(child, "green", "Auto Layout ✓");
+      annotateBlock(child, "green", "Auto Layout ✓", "applied");
       return;
     }
 
@@ -376,29 +535,13 @@ figma.on("selectionchange", async () => {
       child.children.length > 1;
 
     if (layout.type === "grid") {
-      annotateBlock(child, "blue", "Grid ✓");
+      annotateBlock(child, "green", "Auto Layout ✓", "applied");
       return;
     }
 
     if (looksStackable) {
-      annotateBlock(child, "yellow", "Try Auto Layout");
+      annotateBlock(child, "yellow", "Try Auto Layout", "suggest");
     }
   });
   postToUI(frame);
 });
-
-// ────────────────────────────────────────────────────────────────
-// TEST AnnotateBlock
-// ────────────────────────────────────────────────────────────────
-
-// async function testAnnotation() {
-//   const rect = figma.createRectangle();
-//   rect.resize(100, 100);
-//   rect.x = 500;
-//   rect.y = 500;
-//   figma.currentPage.appendChild(rect);
-
-//   await annotateBlock(rect, "green", "Test Working!");
-// }
-
-// // testAnnotation();

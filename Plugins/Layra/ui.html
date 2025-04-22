@@ -23,18 +23,29 @@
       .row:hover {
         background: #f5f5f5;
       }
+      .icon-pencil {
+        font-size: 11px;
+        margin-left: 4px;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 0.2s;
+      }
+      .row:hover .icon-pencil {
+        opacity: 1;
+      }
       .warn {
         color: #d33;
         font-size: 11px;
         margin-left: 4px;
       }
+
       .pill {
         font-size: 10px;
         border-radius: 4px;
         padding: 0 4px;
         margin-left: auto;
       }
-      .grid {
+      /* .grid {
         background: #2196f3;
         color: #fff;
       }
@@ -44,7 +55,16 @@
       }
       .block {
         background: #ffc107;
+      } */
+      .auto {
+        background: #4caf50;
+        color: #fff;
       }
+      .suggest {
+        background: #ffc107;
+        color: black;
+      }
+
       .mis {
         color: #ff9800;
         font-size: 11px;
@@ -59,6 +79,43 @@
         display: none;
         padding: 12px 16px;
         border-bottom: 1px solid #eee;
+      }
+      /* Add to existing styles */
+      .name-container {
+        display: flex;
+        align-items: center;
+        flex-grow: 1;
+        min-width: 0;
+      }
+
+      .name-display {
+        cursor: text;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        padding: 2px 4px;
+        border-radius: 2px;
+      }
+
+      .name-display:hover {
+        background: rgba(0, 0, 0, 0.05);
+      }
+
+      .name-input {
+        font: inherit;
+        color: inherit;
+        background: white;
+        border: 1px solid #18a0fb;
+        border-radius: 3px;
+        padding: 2px 4px;
+        margin: -1px 0;
+        width: 100%;
+        outline: none;
+      }
+
+      .name-input:focus {
+        border-color: #18a0fb;
+        box-shadow: 0 0 0 1px #18a0fb;
       }
     </style>
   </head>
@@ -75,7 +132,7 @@
       >
         🔁 Order mismatch detected
         <button
-        id="fix-order-btn"
+          id="fix-order-btn"
           style="
             margin-left: 8px;
             background: #18a0fb;
@@ -107,6 +164,48 @@
         ✅ No issues detected
       </div>
     </div>
+
+    <div
+      id="section-panel"
+      style="display: none; padding: 12px 16px; border-bottom: 1px solid #eee"
+    >
+      <div style="font-weight: 600; margin-bottom: 4px">Section Details</div>
+
+      <!-- Breadcrumbs -->
+      <div
+        id="breadcrumbs"
+        style="font-size: 11px; color: #888; margin-bottom: 8px"
+      ></div>
+
+      <!-- Section Name -->
+      <div
+        id="section-name-display"
+        class="name-display"
+        style="margin-bottom: 8px"
+      ></div>
+
+      <!-- Layout Pill -->
+      <div style="display: flex; align-items: center; margin-bottom: 12px">
+        <span id="section-role-pill" class="pill"></span>
+      </div>
+
+      <!-- Auto Layout Action Button -->
+      <button
+        id="section-action-btn"
+        style="
+          width: 100%;
+          background: #18a0fb;
+          color: white;
+          border: none;
+          padding: 6px 12px;
+          border-radius: 4px;
+          font-size: 13px;
+        "
+      >
+        Apply/Remove Auto Layout
+      </button>
+    </div>
+
     <div id="list"></div>
 
     <script>
@@ -116,8 +215,60 @@
         if (!msg) return;
         if (msg.type === "CLEAR") {
           list.innerHTML = "";
+          document.getElementById("summary-panel").style.display = "none";
+          document.getElementById("section-panel").style.display = "none";
           return;
         }
+
+        if (msg.type === "SECTION_CONTEXT") {
+          const panel = document.getElementById("section-panel");
+          const nameDisplay = document.getElementById("section-name-display");
+          const rolePill = document.getElementById("section-role-pill");
+          const actionBtn = document.getElementById("section-action-btn");
+          const breadcrumbDiv = document.getElementById("breadcrumbs");
+
+          panel.style.display = "block";
+
+          //Breadcrumbs logic
+          breadcrumbDiv.innerHTML = msg.payload.breadcrumbs
+            .map((crumb) => `<span>${crumb.name}</span>`)
+            .join(" / ");
+
+          // Section name 
+          nameDisplay.textContent = msg.payload.targetName;
+
+          if(msg.payload.role) {
+            rolePill.style.display = "inline-block";
+            rolePill.textContent = msg.payload.role === "applied" ? "Auto ✅" : "Suggest ⚠️";
+            rolePill.className = "pill " + (msg.payload.role === "applied" ? "auto" : "suggest");
+            
+            actionBtn.style.display = "block";
+            actionBtn.textContent = msg.payload.role === "applied" ? "Remove Auto Layout" : "Apply Auto Layout";
+
+            actionBtn.onclick = () => {
+              parent.postMessage({
+                pluginMessage: {
+                  type: msg.payload.role === "applied" ? "REMOVE_AUTO" : "APPLY_AUTO",
+                  id: msg.payload.targetId,
+                }
+              }, "*");
+            };
+
+          } else {
+            rolePill.style.display = "none";
+            actionBtn.style.display = "none";
+          }
+          
+          //Render children layers (if needed)
+          list.innerHTML = "";
+          if(msg.payload.children.length > 0) {
+            msg.payload.children.forEach(child => renderNode(child, 0));
+          } else {
+            list.innerHTML = '<div style="padding: 8px 16px; color: #999;">No child layers.</div>';
+          }
+          return; // Stop here so AUDI_DATA doesn't override this section
+        }
+
         if (msg.type !== "AUDIT_DATA") return;
 
         const { frameName, layers } = msg.payload;
@@ -159,58 +310,105 @@
           const row = document.createElement("div");
           row.className = "row";
           row.style.paddingLeft = 16 + depth * 12 + "px";
-          row.innerHTML = `
-           ${node.name || "(unnamed)"}
-           <span class="icon-jump" style="opacity:0; margin-left: 4px; font-size: 11px;">↗</span>
-          `;
 
-          // Add hover effects via JS 9avoid CSS changes)
-          row.addEventListener("mouseenter", () => {
-            row.querySelector(".icon-jump").style.opacity = "1";
-            row.style.backgroundColor = "#f5f5f5";
-          });
-          row.addEventListener("mouseleave", () => {
-            row.querySelector(".icon-jump").style.opacity = "0";
-            row.style.backgroundColor = "";
-          });
+          //Create name container
+          const nameContainer = document.createElement("div");
+          nameContainer.className = "name-container";
 
-          if (node.badName) {
-            const w = document.createElement("span");
-            w.className = "warn";
-            w.textContent = "⚠ rename";
-            w.title = "Generic name like 'Frame 1' detected"; // Native tooltip
-            row.appendChild(w);
+          // Create name display
+          const nameDisplay = document.createElement("span");
+          nameDisplay.className = "name-display";
+          nameDisplay.textContent = node.name || "(unnamed)";
+
+          //Create input field (hidden initially)
+          const nameInput = document.createElement("input");
+          nameInput.className = "name-input";
+          nameInput.value = node.name || "";
+          nameInput.style.display = "none";
+
+          // ✏️ Rename icon
+          const pencil = document.createElement("span");
+          pencil.className = "icon-pencil";
+          pencil.textContent = "✏️";
+          pencil.title = "Click to rename";
+
+          nameContainer.appendChild(nameDisplay);
+          nameContainer.appendChild(pencil);
+          nameContainer.appendChild(nameInput);
+          row.appendChild(nameContainer);
+
+          // Hover state handled by CSS
+
+          // Trigger inline edit
+          function beginRename(e) {
+            e.stopPropagation();
+            nameDisplay.style.display = "none";
+            nameInput.style.display = "block";
+            nameInput.focus();
+            nameInput.select();
           }
 
+          // Click to edit
+          pencil.addEventListener("click", beginRename);
 
-          if (node.suggestGroup) {
-            const g = document.createElement("span");
-            g.className = "grp";
-            g.textContent = "⧉ group?";
-            g.title = "Layers are aligned with uniform spacing (8-24px)";
-            row.appendChild(g);
-          }
+          // Rename logic
+          nameInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") saveName();
+            if (e.key === "Escape") cancelEdit();
+          });
 
-          const pill = document.createElement("span");
-          pill.className = "pill " + node.layout;
-          pill.textContent = node.layout;
-          row.appendChild(pill);
+          nameInput.addEventListener("blur", saveName);
 
-          row.onclick = () =>
-            parent.postMessage(
-              { pluginMessage: { type: "SELECT_LAYER", id: node.id } },
-              "*"
-            );
-          row.ondblclick = () => {
-            const newName = prompt("New name:", node.name);
-            if (newName)
+          function saveName() {
+            const newName = nameInput.value.trim();
+            if (newName && newName !== node.name) {
               parent.postMessage(
                 {
-                  pluginMessage: { type: "RENAME_LAYER", id: node.id, newName },
+                  pluginMessage: {
+                    type: "RENAME_LAYER",
+                    id: node.id,
+                    newName,
+                  },
                 },
                 "*"
               );
+              //Update display immediately
+              nameDisplay.textContent = newName;
+
+              setTimeout(() => {
+                parent.postMessage(
+                  {
+                    pluginMessage: { type: "REQUEST_REFRESH" },
+                  },
+                  "*"
+                );
+              }, 100);
+            }
+            cancelEdit();
+          }
+
+          function cancelEdit() {
+            nameInput.style.display = "none";
+            nameDisplay.style.display = "inline";
+          }
+
+          // Pill + layout
+          if (node.layout === "auto" || node.layout === "suggest") {
+            const pill = document.createElement("span");
+            pill.className = "pill " + node.layout;
+            pill.textContent = node.layout;
+            row.appendChild(pill);
+          }
+
+          row.onclick = () => {
+            if (nameInput.style.display !== "block") {
+              parent.postMessage(
+                { pluginMessage: { type: "SELECT_LAYER", id: node.id } },
+                "*"
+              );
+            }
           };
+
           list.appendChild(row);
 
           node.children.forEach((child) => renderNode(child, depth + 1));
@@ -218,11 +416,11 @@
 
         layers[0].children.forEach((child) => renderNode(child));
 
-        document.getElementById("fix-order-btn")?.addEventListener("click", () => {
-          parent.postMessage({ pluginMessage: {type: "FIX_ORDER"}}, "*");
-        });
-
-
+        document
+          .getElementById("fix-order-btn")
+          ?.addEventListener("click", () => {
+            parent.postMessage({ pluginMessage: { type: "FIX_ORDER" } }, "*");
+          });
       };
     </script>
   </body>
