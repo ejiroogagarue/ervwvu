@@ -6,12 +6,15 @@
  *****************************************************************/
 
 // ────────────────────────────────────────────────────────────────
-
+// Launch Sidebar on Selection 
 figma.showUI(__html__, { width: 280, height: 500, themeColors: true });
 
 // Helper: remove any node we previously tagged as a Layra panel
-
+/** --> This functions removes amy extra visual elements 
+ * that Layra plugin added to the file  */
 function clearLayraArtifacts() {
+  // 1.) It finds all node (layers/frames) that have a special tag
+  // 2.) this ensures that every time layra runs we never get duplicate or left over overlays.
   figma.currentPage
     .findAll((n) => n.getPluginData("layra") === "1")
     .forEach((n) => n.remove());
@@ -46,6 +49,25 @@ function generateBreadcrumbs(node: SceneNode) {
   }
 
   return breadcrumbs;
+}
+
+// Helper: Refresh role funcion
+// Helps go throguh all layers in the frames.
+// Sets a tag saying if Auto Layout is already applied or should be suggested.
+function refreshRoles(node: SceneNode) {
+  // for frames, update their role sticker
+  if (node.type === "FRAME") {
+    const role = node.layoutMode !== "NONE" ? "applied" : "suggest";
+    node.setPluginData("layra-role", role);
+  }
+
+  // Look inside boxes inside boxes
+  if ("children" in node) {
+    // recursion for children 
+    node.children.forEach((child) => {
+      refreshRoles(child); // Check every toy in the box
+    });
+  }
 }
 
 ////////////////////////////////////////////////////////
@@ -170,8 +192,8 @@ function guessGapBetweenChildren(node: FrameNode | GroupNode): number {
  * -> CSS Grid: ELements arranged in evenly spaced rows and columns.
  */
 function sniffLayout(node: SceneNode): LayoutAnalysis {
-   const cached = layoutCache.get(node.id);
-   if(cached) return cached;
+  const cached = layoutCache.get(node.id);
+  if (cached) return cached;
 
   const base: LayoutAnalysis = { type: "block" };
   // Only frames/groups can be flex/grid
@@ -195,12 +217,9 @@ function sniffLayout(node: SceneNode): LayoutAnalysis {
     base.type = "grid";
     base.gap = guessGapBetweenChildren(node);
   }
-  
+
   layoutCache.set(node.id, base);
   return base;
-
-
-
 }
 
 ////////////////////////////////////////////////////////
@@ -338,10 +357,15 @@ function nodeInfo(node: SceneNode): NodeInfo {
 // Extract the return type automatically
 
 function buildAuditPayload(frame: FrameNode) {
+    // contains the object we use for our audit 
   const layers = [nodeInfo(frame)];
 
+
+  
   // Count rename warnings
   let renameCount = 0;
+
+  // capture badNames
   function countBadNames(node: NodeInfo) {
     if (node.badName) renameCount++;
     node.children.forEach(countBadNames);
@@ -365,23 +389,15 @@ function buildAuditPayload(frame: FrameNode) {
   };
 }
 
-// Send payload to UI
+
+/* this function analyzes a frame , find a problem and updates the sideba
+  to show current audi summary for the user */
 function postToUI(frame: FrameNode) {
-  // Clear existing cache
+  // This helps layput analysis results, so the next check is accurate and not stale
   layoutCache.clear();
 
- //Refresh all nested elements
- function refreshRoles(node: SceneNode) {
-  if(node.type === "FRAME") {
-    const role = node.layoutMode !== "NONE" ? "applied" : "suggest";
-    node.setPluginData("layra-role", role);
-  }
-  if("children" in node) {
-    node.children.forEach(refreshRoles);
-  }
- }
-
- refreshRoles(frame);
+  refreshRoles(frame);
+  // handle buildAuditPayload 
   figma.ui.postMessage({
     type: "AUDIT_DATA",
     payload: buildAuditPayload(frame),
@@ -451,97 +467,161 @@ figma.ui.onmessage = (msg) => {
     }
   }
 
-  if (msg.type === "APPLY_AUTO") {
-    const node = figma.getNodeById(msg.id);
-    if (node?.type === "FRAME") {
-      const layout = sniffLayout(node);
-      //Smart direction detection
-      const isHorizontal = node.children.every(
-        (c, i, arr) => i === 0 || c.x > arr[i - 1].x + arr[i - 1].width
-      );
+  if (msg.type === "APPLY_AUTO" || msg.type === "REMOVE_AUTO") {
+    figma.getNodeByIdAsync(msg.id).then(async (node) => {
+      try {
+        // Validate node
+        if (!node || node.type !== "FRAME") return;
 
-      node.layoutMode = isHorizontal ? "HORIZONTAL" : "VERTICAL";
-      node.primaryAxisAlignItems = "SPACE_BETWEEN";
-      node.itemSpacing = 8;
+        // Handle cross-page nodes
+        const originalPage = figma.currentPage;
+        let changedPage = false;
 
-      // Update nested roles
-      node.setPluginData("layra-role", "applied");
-    }
-  }
+        if (
+          node.parent &&
+          node.parent.type === "PAGE" &&
+          node.parent !== originalPage
+        ) {
+          figma.currentPage = node.parent;
+          changedPage = true;
+          await new Promise((resolve) => setTimeout(resolve, 50)); // Allow page switch
+        }
 
-  if (msg.type === "REMOVE_AUTO") {
-    const node = figma.getNodeById(msg.id);
-    if (node && node.type === "FRAME" && "layoutMode" in node) {
-      node.layoutMode = "NONE";
-      postToUI(figma.currentPage.selection[0] as FrameNode);
-    }
+        // Perfrom layout operation
+        if (msg.type === "APPLY_AUTO") {
+          const bounds = node.children.reduce(
+            (acc, child) => {
+              return {
+                minX: Math.min(acc.minX, child.x),
+                maxX: Math.max(acc.maxX, child.x + child.width),
+                minY: Math.min(acc.minY, child.y),
+                maxY: Math.max(acc.maxY, child.y + child.height),
+              };
+            },
+            { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity }
+          );
+
+          // Smart direction detection
+          const isHorizontal =
+            bounds.maxX - bounds.minX > bounds.maxY - bounds.minY;
+
+          node.layoutMode = isHorizontal ? "HORIZONTAL" : "VERTICAL";
+          node.primaryAxisAlignItems = "MIN";
+          node.counterAxisAlignItems = "MIN";
+          node.itemSpacing = 8;
+        } else {
+          node.layoutMode = "NONE";
+        }
+
+        // Restore original page context if changed
+        if (changedPage) {
+          figma.currentPage = originalPage;
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+
+        // Refresh UI
+        if (figma.currentPage.selection.length === 1) {
+          const selected = figma.currentPage.selection[0];
+          if (selected && selected.type === "FRAME") {
+            postToUI(selected);
+          }
+        }
+
+        // Update roles recursively
+        node.setPluginData(
+          "layra-role",
+          msg.type === "APPLY_AUTO" ? "applied" : ""
+        );
+        refreshRoles(node);
+      } catch (error) {
+        console.error("Auto Layout Error:", error);
+      }
+    });
   }
 };
 
 // ────────────────────────────────────────────────────────────────
 // Main selection listener
-
+/** 1. USER SELECTS A FRAME  */
 figma.on("selectionchange", async () => {
+  // Remove previously drawn overlay frames (So UI is always fresh)
   clearLayraArtifacts();
 
   const sel = figma.currentPage.selection;
 
+  
+  /**  
+   * 1.) Sends a message from plugin code to UI Script 
+   * 2.) To make sure the sidebar always shows the correct info 
+   * for the current selection and never mixes up old and new audits
+   * 3.) the mesage is sent to if (msg.type === "CLEAR") {}
+   * */ 
+  figma.ui.postMessage({ type: "CLEAR" });
+  
+  // Check if only one item is selected
   if (sel.length === 1) {
+    // Get the selected node
     const node = sel[0];
-    const layout = sniffLayout(node);
-    const role =
-      node.getPluginData("layra-role") ||
-      (layout.type === "flex"
-        ? "applied"
-        : layout.type === "grid"
-        ? "suggest"
-        : "");
+    // Is it a "root frame" -> (a frame directly on the page not nested inside a group or frame).
+    const isRootFrame = node.type === "FRAME" && node.parent?.type === "PAGE"; // Check if direct child of page 
+    if (isRootFrame) {
+      // Show only summary for root frame 
+      postToUI(node); // This will show summary panel
+    } else {
+      //Show section panel for nested elements
+      const layout = sniffLayout(node);
+      const role =
+        node.getPluginData("layra-role") ||
+        (layout.type === "flex"
+          ? "applied"
+          : layout.type === "grid"
+          ? "suggest"
+          : "");
 
-    figma.ui.postMessage({
-      type: "SECTION_CONTEXT",
-      payload: {
-        role: node.type === "FRAME" ? role : "", // Only show for frames
-        targetId: node.id,
-        targetName: node.name,
-        breadcrumbs: generateBreadcrumbs(node),
-        children: isFrameOrGroup(node) ? node.children.map(nodeInfo) : [],
-      },
+      figma.ui.postMessage({
+        type: "SECTION_CONTEXT",
+        payload: {
+          role: node.type === "FRAME" ? role : "", // Only show for frames
+          targetId: node.id,
+          targetName: node.name,
+          breadcrumbs: generateBreadcrumbs(node),
+          children: isFrameOrGroup(node) ? node.children.map(nodeInfo) : [],
+        },
+      });
+    }
+  }
+
+  // Only process frame annotations for root frames
+  if (sel.length === 1 && sel[0].type === "FRAME") {
+    const frame = sel[0] as FrameNode;
+
+    // Annotation logic remains the same 
+    frame.children.forEach((child) => {
+      // Skip invisible layers
+      if (!child.visible) return;
+
+      // If child is itself a frame with Auto Layout -> green
+      if (child.type === "FRAME" && child.layoutMode !== "NONE") {
+        annotateBlock(child, "green", "Auto Layout ✓", "applied");
+        return;
+      }
+
+      // For everything else, run sniffLayput to see if it's a clean stack
+      const layout = sniffLayout(child);
+      const looksStackable =
+        layout.type === "block" &&
+        isFrameOrGroup(child) &&
+        child.children.length > 1;
+
+      if (layout.type === "grid") {
+        annotateBlock(child, "green", "Auto Layout ✓", "applied");
+        return;
+      }
+
+      if (looksStackable) {
+        annotateBlock(child, "yellow", "Try Auto Layout", "suggest");
+      }
     });
+    postToUI(frame);
   }
-
-  if (sel.length !== 1 || sel[0].type !== "FRAME") {
-    figma.ui.postMessage({ type: "CLEAR" });
-    return;
-  }
-
-  const frame = sel[0] as FrameNode;
-
-  // Iterate over top-level children
-  frame.children.forEach((child) => {
-    // Skip invisible layers
-    if (!child.visible) return;
-
-    // If child is itself a frame with Auto Layout -> green
-    if (child.type === "FRAME" && child.layoutMode !== "NONE") {
-      annotateBlock(child, "green", "Auto Layout ✓", "applied");
-      return;
-    }
-
-    // For everything else, run sniffLayput to see if it's a clean stack
-    const layout = sniffLayout(child);
-    const looksStackable =
-      layout.type === "block" &&
-      isFrameOrGroup(child) &&
-      child.children.length > 1;
-
-    if (layout.type === "grid") {
-      annotateBlock(child, "green", "Auto Layout ✓", "applied");
-      return;
-    }
-
-    if (looksStackable) {
-      annotateBlock(child, "yellow", "Try Auto Layout", "suggest");
-    }
-  });
-  postToUI(frame);
 });

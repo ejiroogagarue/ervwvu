@@ -45,17 +45,6 @@
         padding: 0 4px;
         margin-left: auto;
       }
-      /* .grid {
-        background: #2196f3;
-        color: #fff;
-      }
-      .flex {
-        background: #4caf50;
-        color: #fff;
-      }
-      .block {
-        background: #ffc107;
-      } */
       .auto {
         background: #4caf50;
         color: #fff;
@@ -117,6 +106,38 @@
         border-color: #18a0fb;
         box-shadow: 0 0 0 1px #18a0fb;
       }
+      #summary-panel, #section-panel {
+        display: none;
+      }
+
+      #summary-panel.visible, #section-panel.visible {
+        display: block;
+      }
+
+     /* <----------NEW STYLES-------------> */
+      #list {
+        position: relative;
+      }
+
+      .row {
+        position: relative;
+        padding-left: 24px;
+        min-height: 24px;
+        display: flex;
+        align-items: center;
+      }
+
+      /* Vertical connector line */
+      .row::before {
+        content: '';
+        position: absolute;
+        left: 16px;
+        top: -12px;
+        bottom: -12px;
+        width: 1px;
+        background: #eee;
+      }
+
     </style>
   </head>
   <body>
@@ -210,10 +231,19 @@
 
     <script>
       const list = document.getElementById("list");
+      // all message functions captured here 
       onmessage = ({ data }) => {
         const msg = data.pluginMessage;
         if (!msg) return;
+        // Receives message from -> "figma.ui.postMessage({ type: "CLEAR" });"
+        // The sidebar is wiped clean—no layer list, no warnings, no panels.
+        // So it’s ready to show new audit results
         if (msg.type === "CLEAR") {
+          /* 
+          1.) Clear out the main layer list in the sidebar UI.
+          2.) Hides the summary panel at the top of the sidebar 
+          3.) Hides the section-panel which shows detaisl when you drill down 
+          */
           list.innerHTML = "";
           document.getElementById("summary-panel").style.display = "none";
           document.getElementById("section-panel").style.display = "none";
@@ -268,9 +298,11 @@
           }
           return; // Stop here so AUDI_DATA doesn't override this section
         }
-
+       
+        // if no "AUDI_DATA" stop operation 
         if (msg.type !== "AUDIT_DATA") return;
-
+       
+         // ----> THIS BLOCK RUNS FOR AUDIT_DATA <-----
         const { frameName, layers } = msg.payload;
         document.getElementById("title").textContent = "Layra -" + frameName;
         list.innerHTML = "";
