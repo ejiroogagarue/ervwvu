@@ -3,133 +3,83 @@
   <head>
     <style>
       body {
-        font: 13px/1, 4 Inter, sans-serif;
+        font: 13px/1.4 Inter, sans-serif;
         margin: 0;
+        background: #fff;
       }
       #title {
         font-weight: 600;
         padding: 12px 16px;
         border-bottom: 1px solid #eee;
       }
+      /*---------------Checklist Bar---------------*/
+      #checklist {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: #fff;
+        border-bottom: 1px solid #eee;
+        padding: 8px 16px;
+      }
+
+      #checklist header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      #progress {
+        font-size: 11px;
+        color: #888;
+        flex: 1;
+      }
+
+      .bullet {
+        font-size: 14px;
+      }
+
+      #toggleChk {
+        cursor: pointer;
+        border: none;
+        background: none;
+        font-size: 12px;
+      }
+
+      .chk-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 6px;
+      }
+      .chk-item button {
+        margin-left: auto;
+        font-size: 11px;
+        cursor: pointer;
+        background: #18a0fb;
+        color: #fff;
+        border: none;
+        padding: 2px 8px;
+        border-radius: 4px;
+      }
+
+      /* ───────── Layer tree ───────── */
       #list {
         padding: 6px 0 14px;
-      }
-      .row {
-        padding: 4px 16px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-      }
-      .row:hover {
-        background: #f5f5f5;
-      }
-      .icon-pencil {
-        font-size: 11px;
-        margin-left: 4px;
-        cursor: pointer;
-        opacity: 0;
-        transition: opacity 0.2s;
-      }
-      .row:hover .icon-pencil {
-        opacity: 1;
-      }
-      .warn {
-        color: #d33;
-        font-size: 11px;
-        margin-left: 4px;
-      }
-
-      .pill {
-        font-size: 10px;
-        border-radius: 4px;
-        padding: 0 4px;
-        margin-left: auto;
-      }
-      .auto {
-        background: #4caf50;
-        color: #fff;
-      }
-      .suggest {
-        background: #ffc107;
-        color: black;
-      }
-
-      .mis {
-        color: #ff9800;
-        font-size: 11px;
-        margin-left: 4px;
-      }
-      .grp {
-        color: #e6a700;
-        font-size: 11px;
-        margin-left: 4px;
-      }
-      #summary-panel {
-        display: none;
-        padding: 12px 16px;
-        border-bottom: 1px solid #eee;
-      }
-      /* Add to existing styles */
-      .name-container {
-        display: flex;
-        align-items: center;
-        flex-grow: 1;
-        min-width: 0;
-      }
-
-      .name-display {
-        cursor: text;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        padding: 2px 4px;
-        border-radius: 2px;
-      }
-
-      .name-display:hover {
-        background: rgba(0, 0, 0, 0.05);
-      }
-
-      .name-input {
-        font: inherit;
-        color: inherit;
-        background: white;
-        border: 1px solid #18a0fb;
-        border-radius: 3px;
-        padding: 2px 4px;
-        margin: -1px 0;
-        width: 100%;
-        outline: none;
-      }
-
-      .name-input:focus {
-        border-color: #18a0fb;
-        box-shadow: 0 0 0 1px #18a0fb;
-      }
-      #summary-panel, #section-panel {
-        display: none;
-      }
-
-      #summary-panel.visible, #section-panel.visible {
-        display: block;
-      }
-
-     /* <----------NEW STYLES-------------> */
-      #list {
         position: relative;
       }
-
       .row {
         position: relative;
         padding-left: 24px;
         min-height: 24px;
         display: flex;
         align-items: center;
+        cursor: pointer;
       }
-
-      /* Vertical connector line */
+      .row:hover {
+        background: #f5f5f5;
+      }
       .row::before {
-        content: '';
+        content: "";
         position: absolute;
         left: 16px;
         top: -12px;
@@ -138,321 +88,443 @@
         background: #eee;
       }
 
+      .row.top {
+        margin-top: 6px; /* space *above* each section  */
+      }
+
+      .row.top:first-child {
+        margin-top: 0; /* keep the very first one tight */
+      }
+
+      .branch {
+        font-family: SFMono, Menlo, monospace;
+        font-size: 12px;
+      }
+
+      .pill.auto {
+        background: #4caf50;
+        color: #fff;
+      }
+      .pill.suggest {
+        background: #ffc107;
+        color: #000;
+      }
+      .pill.error {
+        background: #d33;
+        color: #fff;
+      }
+
+      /* ───────── Section panel (drill-down) ───────── */
+      #section {
+        display: none;
+        padding: 12px 16px;
+        border-top: 1px solid #eee;
+      }
+      #breadcrumbs {
+        font-size: 11px;
+        color: #888;
+        margin-bottom: 8px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #section-name {
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+      #section-action {
+        width: 100%;
+        background: #18a0fb;
+        color: #fff;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 4px;
+        font-size: 13px;
+        margin-top: 12px;
+      }
     </style>
   </head>
   <body>
     <div id="title">Layra Layers</div>
-    <div
-      id="summary-panel"
-      style="padding: 12px 16px; border-bottom: 1px solid #eee"
-    >
-      <!-- Order Warning -->
-      <div
-        id="order-warning"
-        style="display: none; color: #ff9800; margin-bottom: 8px"
-      >
-        🔁 Order mismatch detected
-        <button
-          id="fix-order-btn"
-          style="
-            margin-left: 8px;
-            background: #18a0fb;
-            color: white;
-            border: none;
-            padding: 2px 8px;
-            border-radius: 4px;
-          "
-        >
-          Fix Order
-        </button>
-      </div>
 
-      <!-- Rename Needed -->
-      <div
-        id="rename-warning"
-        style="display: none; color: #d33; margin-bottom: 8px"
-      >
-        ✍️ <span id="rename-count">0</span> layers need better names
-      </div>
+    <!-- ░░ Checklist Bar ░░ -->
+    <div id="checklist">
+      <header>
+        <span>🔗 Dev-Ready Checklist</span>
+        <span id="progress">●○○○○</span>
+        <button id="toggleChk" aria-label="Collapse">—</button>
+      </header>
 
-      <!-- Group Suggestion -->
-      <div id="group-suggestion" style="display: none; color: #e6a700">
-        ⧉ Grouping opportunity found
-      </div>
-
-      <!-- Empty State -->
-      <div id="empty-state" style="display: none; color: #4caf50">
-        ✅ No issues detected
+      <div id="chk-items">
+        <!-- items injected by JS -->
+        <!--
+        <div class="chk-item" data-id="fix-order">
+          <span class="bullet">[!]</span> Fix stacking order
+          <button>Fix Now</button>
+        </div>
+        -->
       </div>
     </div>
 
-    <div
-      id="section-panel"
-      style="display: none; padding: 12px 16px; border-bottom: 1px solid #eee"
-    >
-      <div style="font-weight: 600; margin-bottom: 4px">Section Details</div>
-
-      <!-- Breadcrumbs -->
-      <div
-        id="breadcrumbs"
-        style="font-size: 11px; color: #888; margin-bottom: 8px"
-      ></div>
-
-      <!-- Section Name -->
-      <div
-        id="section-name-display"
-        class="name-display"
-        style="margin-bottom: 8px"
-      ></div>
-
-      <!-- Layout Pill -->
-      <div style="display: flex; align-items: center; margin-bottom: 12px">
-        <span id="section-role-pill" class="pill"></span>
-      </div>
-
-      <!-- Auto Layout Action Button -->
-      <button
-        id="section-action-btn"
-        style="
-          width: 100%;
-          background: #18a0fb;
-          color: white;
-          border: none;
-          padding: 6px 12px;
-          border-radius: 4px;
-          font-size: 13px;
-        "
-      >
-        Apply/Remove Auto Layout
-      </button>
-    </div>
-
+    <!-- ░░ Layer Tree ░░ -->
     <div id="list"></div>
+    <button
+      id="show-all"
+      style="display: none; margin: 0 0 12px 16px; font-size: 11px"
+    >
+      Show All Layers…
+    </button>
+
+    <!-- ░░ Section Panel (drill-down) ░░ -->
+    <div id="section">
+      <div id="breadcrumbs"></div>
+      <div id="section-name"></div>
+      <span id="section-role" class="pill"></span>
+      <button id="section-action"></button>
+      <button id="export-json" style="margin-top: 8px; font-size: 12px">
+        📦 Export JSON
+      </button>
+      <pre
+        id="json-output"
+        style="
+          white-space: pre-wrap;
+          padding: 8px;
+          border: 1px solid #eee;
+          display: none;
+          height: 200px;
+          overflow: auto;
+        "
+      ></pre>
+    </div>
 
     <script>
-      const list = document.getElementById("list");
-      // all message functions captured here 
+      /* =========================================================================
+            STATE
+        ====================================================================== */
+
+      let checklistCollapsed = false;
+      let CHECKLIST_MAX_VISIBLE = 3; // Show 3 items, then "Show all layers..."
+      let showAllLayers = false;
+
+      let treeData = null; // latest NodeInfo tree from plugin
+      let dragNode = null; // Node being dragged (NodeInfo ref)
+      let dragElm = null; // <div.row> element being dragged
+      let dropInfo = null; // {targetId, node:'before'|'after'|'child'}
+
+      const listEl = document.getElementById("list");
+      const bar = document.createElement("div"); // drop indicator
+      bar.style.cssText =
+        "position:absolute;height:0;border-top:2px solid #18a0fb;pointer-events:none;display:none";
+      listEl.appendChild(bar);
+
+      /* =========================================================================
+            MESSAGE HANDLERS (hook these back to your plugin messages)
+        ====================================================================== */
       onmessage = ({ data }) => {
         const msg = data.pluginMessage;
         if (!msg) return;
-        // Receives message from -> "figma.ui.postMessage({ type: "CLEAR" });"
-        // The sidebar is wiped clean—no layer list, no warnings, no panels.
-        // So it’s ready to show new audit results
+
         if (msg.type === "CLEAR") {
-          /* 
-          1.) Clear out the main layer list in the sidebar UI.
-          2.) Hides the summary panel at the top of the sidebar 
-          3.) Hides the section-panel which shows detaisl when you drill down 
-          */
-          list.innerHTML = "";
-          document.getElementById("summary-panel").style.display = "none";
-          document.getElementById("section-panel").style.display = "none";
+          clearUI();
           return;
         }
 
+        if (msg.type === "AUDIT_DATA") {
+          treeData = msg.payload.layers[0]; // New Addition
+          renderChecklist(msg.payload.summary);
+          renderLayerPreview(); // root frame children
+        }
+
         if (msg.type === "SECTION_CONTEXT") {
-          const panel = document.getElementById("section-panel");
-          const nameDisplay = document.getElementById("section-name-display");
-          const rolePill = document.getElementById("section-role-pill");
-          const actionBtn = document.getElementById("section-action-btn");
-          const breadcrumbDiv = document.getElementById("breadcrumbs");
-
-          panel.style.display = "block";
-
-          //Breadcrumbs logic
-          breadcrumbDiv.innerHTML = msg.payload.breadcrumbs
-            .map((crumb) => `<span>${crumb.name}</span>`)
-            .join(" / ");
-
-          // Section name 
-          nameDisplay.textContent = msg.payload.targetName;
-
-          if(msg.payload.role) {
-            rolePill.style.display = "inline-block";
-            rolePill.textContent = msg.payload.role === "applied" ? "Auto ✅" : "Suggest ⚠️";
-            rolePill.className = "pill " + (msg.payload.role === "applied" ? "auto" : "suggest");
-            
-            actionBtn.style.display = "block";
-            actionBtn.textContent = msg.payload.role === "applied" ? "Remove Auto Layout" : "Apply Auto Layout";
-
-            actionBtn.onclick = () => {
-              parent.postMessage({
-                pluginMessage: {
-                  type: msg.payload.role === "applied" ? "REMOVE_AUTO" : "APPLY_AUTO",
-                  id: msg.payload.targetId,
-                }
-              }, "*");
-            };
-
-          } else {
-            rolePill.style.display = "none";
-            actionBtn.style.display = "none";
-          }
-          
-          //Render children layers (if needed)
-          list.innerHTML = "";
-          if(msg.payload.children.length > 0) {
-            msg.payload.children.forEach(child => renderNode(child, 0));
-          } else {
-            list.innerHTML = '<div style="padding: 8px 16px; color: #999;">No child layers.</div>';
-          }
-          return; // Stop here so AUDI_DATA doesn't override this section
-        }
-       
-        // if no "AUDI_DATA" stop operation 
-        if (msg.type !== "AUDIT_DATA") return;
-       
-         // ----> THIS BLOCK RUNS FOR AUDIT_DATA <-----
-        const { frameName, layers } = msg.payload;
-        document.getElementById("title").textContent = "Layra -" + frameName;
-        list.innerHTML = "";
-        document.getElementById("summary-panel").style.display = "block";
-
-        // Calculate warnings
-        let renameCount = 0;
-        let hasOrderWarning = false;
-        let hasGroupSuggestion = false;
-
-        function checkNode(node) {
-          if (node.badName) renameCount++;
-          if (node.mismatch) hasOrderWarning = true;
-          if (node.suggestGroup) hasGroupSuggestion = true;
-          node.children.forEach(checkNode);
+          openSection(msg.payload);
         }
 
-        layers.forEach(checkNode);
+        if (msg.type === "SECTION_JSON") {
+          jsonBox.style.display = "block";
+          jsonBox.textContent = JSON.stringify(msg.payload, null, 2);
+        }
+      };
 
-        // Update summary panel
-        document.getElementById("order-warning").style.display = hasOrderWarning
-          ? "flex"
-          : "none";
+      /* =========================================================================
+        CHECKLIST RENDER
+        ====================================================================== */
+      function renderChecklist(summary) {
+        const items = [];
 
-        document.getElementById("rename-warning").style.display =
-          renameCount > 0 ? "flex" : "none";
+        if (summary.hasOrderWarning)
+          items.push({ id: "fix-order", label: "Fix stacking order" });
 
-        document.getElementById("rename-count").textContent = renameCount;
-        document.getElementById("group-suggestion").style.display =
-          hasGroupSuggestion ? "flex" : "none";
-        document.getElementById("empty-state").style.display =
-          !hasOrderWarning && !hasGroupSuggestion && renameCount === 0
-            ? "flex"
-            : "none";
+        if (summary.hasGroupSuggestion)
+          items.push({ id: "group-layers", label: "Group layers" });
 
-        function renderNode(node, depth = 0) {
+        if (summary.renameCount > 0)
+          items.push({
+            id: "rename-layers",
+            label: `Rename ${summary.renameCount} layer${
+              summary.renameCount > 1 ? "s" : ""
+            }`,
+          });
+
+        //progress dots
+        const done = items.filter((i) => i.done).length;
+        document.getElementById("progress").textContent =
+          "●".repeat(done) + "○".repeat(items.length - done);
+
+        //list
+        const wrap = document.getElementById("chk-items");
+        wrap.innerHTML = "";
+        items.forEach((it, i) => {
           const row = document.createElement("div");
-          row.className = "row";
-          row.style.paddingLeft = 16 + depth * 12 + "px";
+          row.className = "chk-item";
+          if (checklistCollapsed && i > 0) row.style.display = "none";
 
-          //Create name container
-          const nameContainer = document.createElement("div");
-          nameContainer.className = "name-container";
+          row.innerHTML = `
+                <span class="bullet">[!]</span>
+                <span>${it.label}</span>
+                <button>Fix&nbsp;Now</button>
+                `;
+          row.querySelector("button").onclick = () =>
+            parent.postMessage({ pluginMessage: { type: it.id } }, "*");
+          wrap.appendChild(row);
+        });
 
-          // Create name display
-          const nameDisplay = document.createElement("span");
-          nameDisplay.className = "name-display";
-          nameDisplay.textContent = node.name || "(unnamed)";
+        // collapse/expand
+        document.getElementById("toggleChk").textContent = checklistCollapsed
+          ? "+"
+          : "-";
+      }
 
-          //Create input field (hidden initially)
-          const nameInput = document.createElement("input");
-          nameInput.className = "name-input";
-          nameInput.value = node.name || "";
-          nameInput.style.display = "none";
+      /* =========================================================================
+   LAYER PREVIEW  (branch-style tree + “Show all”)
+   ====================================================================== */
 
-          // ✏️ Rename icon
-          const pencil = document.createElement("span");
-          pencil.className = "icon-pencil";
-          pencil.textContent = "✏️";
-          pencil.title = "Click to rename";
+      const showAllBtn = document.getElementById("show-all");
 
-          nameContainer.appendChild(nameDisplay);
-          nameContainer.appendChild(pencil);
-          nameContainer.appendChild(nameInput);
-          row.appendChild(nameContainer);
+      function renderLayerPreview() {
+        if (!treeData) return;
+        listEl.innerHTML = "";
+        let shown = 0;
+        appendChildren(treeData.children, 0, false); // ← recursive printer
 
-          // Hover state handled by CSS
-
-          // Trigger inline edit
-          function beginRename(e) {
-            e.stopPropagation();
-            nameDisplay.style.display = "none";
-            nameInput.style.display = "block";
-            nameInput.focus();
-            nameInput.select();
-          }
-
-          // Click to edit
-          pencil.addEventListener("click", beginRename);
-
-          // Rename logic
-          nameInput.addEventListener("keydown", (e) => {
-            if (e.key === "Enter") saveName();
-            if (e.key === "Escape") cancelEdit();
+        function appendChildren(nodes, depth) {
+          nodes.forEach((n, i) => {
+            const last = i === nodes.length - 1;
+            if (!showAllLayers && shown >= CHECKLIST_MAX_VISIBLE) {
+              showAllBtn.style.display = "block";
+              return;
+            }
+            listEl.appendChild(makeRow(n, depth, last));
+            shown++;
+            if (n.children?.length) appendChildren(n.children, depth + 1);
           });
+        }
+      }
 
-          nameInput.addEventListener("blur", saveName);
+      showAllBtn.onclick = () => {
+        showAllLayers = true;
+        showAllBtn.style.display = "none";
+        parent.postMessage({ pluginMessage: { type: "REQUEST_REFRESH" } }, "*");
+      };
 
-          function saveName() {
-            const newName = nameInput.value.trim();
-            if (newName && newName !== node.name) {
-              parent.postMessage(
-                {
-                  pluginMessage: {
-                    type: "RENAME_LAYER",
-                    id: node.id,
-                    newName,
-                  },
-                },
-                "*"
-              );
-              //Update display immediately
-              nameDisplay.textContent = newName;
+      function makeRow(node, depth, last) {
+        const row = document.createElement("div");
+        row.className = "row" + (depth === 0 ? " top" : "");
+        row.draggable = true; /* DND */
+        row.dataset.id = node.id; /* DND */
+        row.style.paddingLeft = 16 + depth * 12 + "px";
 
-              setTimeout(() => {
-                parent.postMessage(
-                  {
-                    pluginMessage: { type: "REQUEST_REFRESH" },
-                  },
-                  "*"
-                );
-              }, 100);
-            }
-            cancelEdit();
+        const branch =
+          depth === 0
+            ? ""
+            : `<span class="branch">${last ? "└── " : "├── "}</span>`;
+
+        row.innerHTML = `${branch}<span>${node.name || "(unnamed)"}</span>
+      ${
+        node.layout
+          ? `<span class="pill ${node.layout}">${node.layout}</span>`
+          : ""
+      }`;
+
+        /* —— Selection passthrough —— */
+        row.onclick = (e) => {
+          if (e.target.closest(".pill")) return; // ignore pill clicks
+          parent.postMessage(
+            { pluginMessage: { type: "SELECT_LAYER", id: node.id } },
+            "*"
+          );
+        };
+
+        /* ————— DND Handlers ————— */
+        row.addEventListener("dragstart", (e) => {
+          dragNode = node;
+          dragElm = row;
+          const ghost = document.createElement("div");
+          document.body.appendChild(ghost);
+          e.dataTransfer.setDragImage(ghost, 0, 0);
+        });
+
+        row.addEventListener("dragover", (e) => {
+          e.preventDefault(); // allow drop
+          const rect = row.getBoundingClientRect();
+          const y = e.clientY - rect.top;
+          const mode =
+            y < rect.height / 3
+              ? "before"
+              : y > (rect.height * 2) / 3
+              ? "after"
+              : "child";
+
+          /* prevent invalid (self/descendant) */
+          if (isInvalidDrop(node)) {
+            bar.style.display = "none";
+            return;
           }
 
-          function cancelEdit() {
-            nameInput.style.display = "none";
-            nameDisplay.style.display = "inline";
+          dropInfo = { targetId: node.id, mode, depth };
+          if (mode == "child") {
+            bar.style.display = "none";
+            row.classList.add("drop-parent");
+          } else {
+            row.classList.remove("drop-parent");
+            bar.style.display = "block";
+            bar.style.left = 16 + depth * 12 + "px";
+            bar.style.top =
+              (mode === "after" ? rect.bottom : rect.top) -
+              listEl.getBoundingClientRect().top +
+              "px";
+            bar.style.width = "calc(100% - " + (16 + depth * 12) + "px)";
           }
+        });
 
-          // Pill + layout
-          if (node.layout === "auto" || node.layout === "suggest") {
-            const pill = document.createElement("span");
-            pill.className = "pill " + node.layout;
-            pill.textContent = node.layout;
-            row.appendChild(pill);
-          }
+        row.addEventListener("dragleave", () => {
+          row.classList.remove("drop-parent");
+        });
 
-          row.onclick = () => {
-            if (nameInput.style.display !== "block") {
-              parent.postMessage(
-                { pluginMessage: { type: "SELECT_LAYER", id: node.id } },
-                "*"
-              );
-            }
-          };
+        row.addEventListener("drop", (e) => {
+          e.preventDefault();
+          finalizeDrop();
+        });
 
-          list.appendChild(row);
+        return row;
+      }
 
-          node.children.forEach((child) => renderNode(child, depth + 1));
+      /* ──────────────────────────────────────────────
+      DROP VALIDATION & APPLY
+      ───────────────────────────────────────────────*/
+      function isInvalidDrop(targetNode) {
+        if (!dragNode) return true;
+        if (dragNode.id === targetNode.id) return true;
+        // simple descendant check (walk up)
+        let cur = targetNode;
+        while (cur) {
+          if (cur.id === dragNode.id) return true;
+          cur = cur.parentRef; // we'll add this link when we build tree
+        }
+        return false;
+      }
+
+      function finalizeDrop() {
+        if (!dropInfo) {
+          cleanupDnD();
+          return;
+        }
+        parent.postMessage(
+          {
+            pluginMessage: {
+              type: "MOVE_LAYER",
+              nodeId: dragNode.id,
+              targetId: dropInfo.targetId,
+              mode: dropInfo.mode, // before | after | child
+            },
+          },
+          "*"
+        );
+        cleanupDnD();
+      }
+
+      function cleanupDnD() {
+        bar.style.display = "none";
+        document
+          .querySelectorAll(".drop-parent")
+          .forEach((el) => el.classList.remove("drop-parent"));
+        dragNode = null;
+        dropInfo = null;
+      }
+
+      /* ──────────────────────────────────────────────
+      "Show all layers…" + rest identical as before
+       ───────────────────────────────────────────────*/
+      document.getElementById("show-all").onclick = () => {
+        showAllLayers = true;
+        document.getElementById("show-all").style.display = "none";
+        parent.postMessage({ pluginMessage: { type: "REQUEST_REFRESH" } }, "*");
+      };
+
+      /* =========================================================================
+      SECTION PANEL
+      ====================================================================== */
+      /*  grab once, keep at module scope  */
+      const exportBtn = document.getElementById("export-json");
+      const jsonBox = document.getElementById("json-output");
+      function openSection(p) {
+        const sec = document.getElementById("section");
+        sec.style.display = "block";
+
+        document.getElementById("breadcrumbs").textContent = p.breadcrumbs
+          .map((b) => b.name)
+          .join(" / ");
+        document.getElementById("section-name").textContent = p.targetName;
+        const role = document.getElementById("section-role");
+        if (p.role) {
+          role.textContent = p.role === "applied" ? "Auto ✅" : "Suggest ⚠️";
+          role.className =
+            "pill " + (p.role === "applied" ? "auto" : "suggest");
+        } else {
+          role.textContent = "";
+          role.className = "pill";
         }
 
-        layers[0].children.forEach((child) => renderNode(child));
+        const btn = document.getElementById("section-action");
+        btn.textContent =
+          p.role === "applied" ? "Remove Auto Layout" : "Apply Auto Layout";
+        btn.onclick = () =>
+          parent.postMessage(
+            {
+              pluginMessage: {
+                type: p.role === "applied" ? "REMOVE_AUTO" : "APPLY_AUTO",
+                id: p.targetId,
+              },
+            },
+            "*"
+          );
 
-        document
-          .getElementById("fix-order-btn")
-          ?.addEventListener("click", () => {
-            parent.postMessage({ pluginMessage: { type: "FIX_ORDER" } }, "*");
-          });
+       
+
+        exportBtn.onclick = () => {
+          // ask plugin for JSON of the currently opened* section
+          parent.postMessage({ pluginMessage: { type: "REQUEST_JSON" } }, "*");
+        };
+      }
+
+      /* =========================================================================
+      HELPERS
+      ====================================================================== */
+      function clearUI() {
+        document.getElementById("list").innerHTML = "";
+        document.getElementById("chk-items").innerHTML = "";
+        document.getElementById("section").style.display = "none";
+        document.getElementById("show-all").style.display = "none";
+      }
+
+      document.getElementById("toggleChk").onclick = () => {
+        checklistCollapsed = !checklistCollapsed;
+        // simple re-order
+        const evt = new Event("dummy"); // trigger nothing; renderChecklist will run on next AUDIT update
+        onmessage({
+          data: {
+            pluginMessage: { type: "AUDIT_DATA", payload: { summary: {} } },
+          },
+        });
       };
     </script>
   </body>
