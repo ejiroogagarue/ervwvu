@@ -201,6 +201,9 @@
       /* =========================================================================
             STATE
         ====================================================================== */
+      // Reference elements once
+      const exportBtn = document.getElementById("export-json");
+      const jsonBox = document.getElementById("json-output");
 
       let checklistCollapsed = false;
       let CHECKLIST_MAX_VISIBLE = 3; // Show 3 items, then "Show all layers..."
@@ -463,9 +466,6 @@
       /* =========================================================================
       SECTION PANEL
       ====================================================================== */
-      /*  grab once, keep at module scope  */
-      const exportBtn = document.getElementById("export-json");
-      const jsonBox = document.getElementById("json-output");
       function openSection(p) {
         const sec = document.getElementById("section");
         sec.style.display = "block";
@@ -497,8 +497,6 @@
             },
             "*"
           );
-
-       
 
         exportBtn.onclick = () => {
           // ask plugin for JSON of the currently opened* section

@@ -41,10 +41,15 @@ type MarkColor = keyof typeof COLORS;
 // Helper: generate breadcrumbs
 function generateBreadcrumbs(node: SceneNode) {
   const breadcrumbs = [];
+  const root = findRootFrame(node);
   let current: BaseNode | null = node;
-
-  while (current && current.type !== "PAGE") {
-    breadcrumbs.unshift({ id: current.id, name: current.name });
+  // stop before reaching root frame
+  while (current && current.id !== root.id) {
+    breadcrumbs.unshift({
+      id: current.id,
+      name: current.name,
+      type: current.type,
+    });
     current = current.parent;
   }
 
@@ -133,6 +138,48 @@ interface NodeInfo {
 interface AuditPayload {
   frameName: string;
   layers: NodeInfo[];
+}
+
+interface SectionExport {
+  rootId: string; // the real root frame id
+  rootName: string; // Add this
+  breadcrumbs: { id: string; name: string }[];
+  node: LeanNode;
+}
+
+interface LeanNode {
+  id: string;
+  name: string;
+  type: string;
+  visible: boolean;
+  layout: {
+    mode: string;
+    direction: string | null;
+    gap: number | null;
+    primary: string | null;
+    counter: string | null;
+  };
+  boxModel: {
+    width: number;
+    height: number;
+    x: number;
+    y: number;
+    padding?: {
+      top: number;
+      right: number;
+      bottom: number;
+      left: number;
+    };
+  };
+  style: {
+    fills: any | null;
+    strokes: any | null;
+    effects: any | null;
+    opacity: number | null;
+  };
+  isRoot: boolean;
+  layoutType: "auto" | "grid" | "manual";
+  children?: LeanNode[]; // Recursive but safe via interface
 }
 
 ////////////////////////////////////////////////////////
@@ -414,58 +461,117 @@ function postToUI(frame: FrameNode) {
   });
 }
 
+/*───────────────────────────────────────────────────────────────
+  Breadcrumb util: walk to first PAGE parent
+────────────────────────────────────────────────────────────────*/
+function findRootFrame(node: SceneNode): FrameNode {
+  let cur: BaseNode | null = node;
+  while (cur && cur.parent && cur.parent.type !== "PAGE") {
+    cur = cur.parent;
+  }
+  // cur is now a Frame or Group directly under PAGE
+  return cur as FrameNode;
+}
 
 /*───────────────────────────────────────────────────────────────
   SECTION ▶ Lean-Json Extractor
 ───────────────────────────────────────────────────────────────*/
-function buildSectionJSON(node: SceneNode) {
-   // ---- helpers -------------------------------------------------
-   const layout = sniffLayout(node);
-   const isAuto = hasLayoutMode(node) && node.layoutMode!=="NONE";
+function buildLeanNode(
+  node: SceneNode,
+  rootX: number,
+  rootY: number
+): LeanNode {
+  // ---- helpers -------------------------------------------------
+  const layout = sniffLayout(node);
+  const isAuto = hasLayoutMode(node) && node.layoutMode !== "NONE";
 
-   const padding = (isAuto && node.type==="FRAME") ? {
-    top: (node as FrameNode).paddingTop,
-    right: (node as FrameNode).paddingRight,
-    bottom: (node as FrameNode).paddingBottom,
-    left: (node as FrameNode).paddingLeft
-   }: undefined;
+  const padding =
+    isAuto && node.type === "FRAME"
+      ? {
+          top: (node as FrameNode).paddingTop,
+          right: (node as FrameNode).paddingRight,
+          bottom: (node as FrameNode).paddingBottom,
+          left: (node as FrameNode).paddingLeft,
+        }
+      : undefined;
 
-   // ---- Object -------------------------------------------------
-   const json:any = {
+  // Add serialization helpers
+
+  const serializePaint = (paint: Paint) => ({
+    type: paint.type,
+    color: "color" in paint ? paint.color : null,
+    opacity: paint.opacity,
+    visible: paint.visible,
+  });
+
+  const serializeEffect = (effect: Effect) => ({
+    type: effect.type,
+    radius: "radius" in effect ? effect.radius : null,
+    offset: "offset" in effect ? effect.offset : null,
+  });
+
+  // ---- Object -------------------------------------------------
+  const json: LeanNode = {
     id: node.id,
     name: node.name,
     type: node.type,
-    visible : node.visible,
+    visible: node.visible,
     layout: {
-      mode : node.type==="FRAME" ? node.layoutMode : "NONE",
+      mode: node.type === "FRAME" ? node.layoutMode : "NONE",
       direction: layout.direction ?? null,
       gap: layout.gap ?? null,
       primary: (node as any).primaryAxisAlignItems ?? null,
-      counter: (node as any).counterAxisAlignItems ?? null
+      counter: (node as any).counterAxisAlignItems ?? null,
     },
     boxModel: {
       width: node.width,
       height: node.height,
-      x: node.x,
-      y: node.y,
-      padding // may be undefined
+      x: node.x - rootX, // Add root offset calculation
+      y: node.y - rootY,
+      padding, // may be undefined
     },
     style: {
-      fills : (node as any).fills ?? null,
-      stokes : (node as any).strokes ?? null,
-      effects: (node as any).effects ?? null,
-      opacity : (node as any).opacity ?? null 
-    }
-   };
+      fills: Array.isArray((node as any).fills)
+        ? (node as any).fills.map(serializePaint)
+        : null,
+      strokes: Array.isArray((node as any).strokes)
+        ? (node as any).strokes.map(serializePaint)
+        : null,
+      effects: Array.isArray((node as any).effects)
+        ? (node as any).effects.map(serializeEffect)
+        : null,
+      opacity: (node as any).opacity ?? null,
+    },
+    isRoot: node.parent?.type === "PAGE",
+    layoutType:
+      sniffLayout(node).type === "flex"
+        ? "auto"
+        : sniffLayout(node).type === "grid"
+        ? "grid"
+        : "manual",
+    children: undefined,
+  };
 
-   // ----- recurse for children ---------------------------------
-   if("children" in node) {
-    json.children = node.children.filter(c => c.visible).map(ch =>buildSectionJSON(ch));
-   }
+  // ----- recurse for children ---------------------------------
+  if ("children" in node) {
+    json.children = node.children
+      .filter((c) => c.visible)
+      .map((ch) => buildLeanNode(ch, rootX, rootY));
+  }
 
-   return json;
+  return json;
+}
 
-
+function exportSection(node: SceneNode): SectionExport {
+  const root = findRootFrame(node);
+  const rootX = root.x;
+  const rootY = root.y;
+  return {
+    rootId: root.id,
+    rootName: root.name,
+    breadcrumbs: generateBreadcrumbs(node),
+    node: buildLeanNode(root, rootX, rootY),
+  };
 }
 
 figma.ui.onmessage = async (msg) => {
@@ -603,13 +709,35 @@ figma.ui.onmessage = async (msg) => {
     });
   }
 
-  if(msg.type === "REQUEST_JSON") {
-    const sel = figma.currentPage.selection;
-    if(sel.length!==1){ return;} // nothing selected
-    const node = sel[0];
+  if (msg.type === "REQUEST_JSON") {
+    try {
+      const sel = figma.currentPage.selection;
+      if (sel.length !== 1) {
+        figma.notify("⚠️ Select exactly one layer to export");
+        return;
+      }
 
-    const payload = buildSectionJSON(node);
-    figma.ui.postMessage({ type: "SECTION_JSON", payload});
+      // Verify valid hierarchy
+      // const root = findRootFrame(sel[0]);
+      // if(!root.visible || root.layoutMode === "NONE") {
+      //   figma.notify("❗ Root frame must have auto-layout enabled");
+      //   return;
+      // }
+      const payload = exportSection(sel[0]);
+      figma.ui.postMessage({ type: "SECTION_JSON", payload });
+    } catch (error) {
+      let errorMessage = "Failed to generate JSON";
+
+      // Type-safe error handling
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === "string") {
+        errorMessage = error;
+      }
+
+      figma.notify(`🚨 Export failed: ${errorMessage}`);
+      console.error("Export Error:", error); // Log full error object
+    }
   }
 
   // -----------Dev-Checklist actions---------------------
@@ -718,33 +846,33 @@ figma.on("selectionchange", async () => {
     const node = sel[0];
     // Is it a "root frame" -> (a frame directly on the page not nested inside a group or frame).
     const isRootFrame = node.type === "FRAME" && node.parent?.type === "PAGE"; // Check if direct child of page
+    //Show section panel for nested elements
+    const layout = sniffLayout(node);
+    const role =
+      node.getPluginData("layra-role") ||
+      (layout.type === "flex"
+        ? "applied"
+        : layout.type === "grid"
+        ? "suggest"
+        : "");
+
+    figma.ui.postMessage({
+      type: "SECTION_CONTEXT",
+      payload: {
+        role: node.type === "FRAME" ? role : "", // Only show for frames
+        targetId: node.id,
+        targetName: node.name,
+        breadcrumbs: generateBreadcrumbs(node),
+        children: isFrameOrGroup(node)
+          ? node.children.map((child) => nodeInfo(child))
+          : [],
+      },
+    });
     if (isRootFrame) {
       // Show only summary for root frame
       postToUI(node); // This will show summary panel
-    } else {
-      //Show section panel for nested elements
-      const layout = sniffLayout(node);
-      const role =
-        node.getPluginData("layra-role") ||
-        (layout.type === "flex"
-          ? "applied"
-          : layout.type === "grid"
-          ? "suggest"
-          : "");
-
-      figma.ui.postMessage({
-        type: "SECTION_CONTEXT",
-        payload: {
-          role: node.type === "FRAME" ? role : "", // Only show for frames
-          targetId: node.id,
-          targetName: node.name,
-          breadcrumbs: generateBreadcrumbs(node),
-          children: isFrameOrGroup(node) ? node.children.map(child => nodeInfo(child)) : [],
-        },
-      });
     }
   }
-
   // Only process frame annotations for root frames
   if (sel.length === 1 && sel[0].type === "FRAME") {
     const frame = sel[0] as FrameNode;
